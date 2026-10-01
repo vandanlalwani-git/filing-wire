@@ -1,0 +1,25 @@
+name: Access probe
+
+# Run it by hand from the Actions tab: "Access probe" -> "Run workflow".
+# It makes no changes to anything. It only reports whether GitHub's
+# machines can reach BSE and NSE.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packages
+        run: pip install requests bse
+
+      - name: Try both exchanges
+        run: python probe.py
