@@ -1,0 +1,132 @@
+name: Collector
+
+# Fetches BSE and NSE filings, classifies them with fixed rules (no AI),
+# saves the record book to the `data` branch and publishes the website.
+#
+# Turned on by uncommenting the schedule below. Until then: manual only.
+# Backfill: run it by hand with "backfill from" / "backfill to" filled in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "auto (normal), quick or full"
+        type: choice
+        options: [auto, quick, full]
+        default: auto
+      with_yesterday:
+        description: "Full run also rebuilds yesterday"
+        type: boolean
+        default: false
+      backfill_from:
+        description: "Backfill start YYYY-MM-DD (leave empty for a normal run)"
+        type: string
+        default: ""
+      backfill_to:
+        description: "Backfill end YYYY-MM-DD"
+        type: string
+        default: ""
+  # schedule:
+  #   - cron: "*/5 * * * *"
+
+# Never two runs at once: they would fight over the data branch.
+concurrency:
+  group: collector
+  cancel-in-progress: false
+
+permissions:
+  contents: write       # push the data branch
+  pages: write          # publish the website
+  id-token: write       # required by the Pages deploy action
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install packages
+        run: pip install -r requirements.txt
+
+      - name: Load the record book from the data branch
+        run: |
+          mkdir -p data
+          if git ls-remote --exit-code --heads origin data > /dev/null 2>&1; then
+            git fetch --depth=1 origin data
+            git archive FETCH_HEAD | tar -x -C data
+            echo "loaded $(find data -type f | wc -l) files"
+          else
+            echo "no data branch yet - starting an empty record book"
+          fi
+
+      - name: Collect
+        id: collect
+        timeout-minutes: 50
+        env:
+          MODE: ${{ inputs.mode || 'auto' }}
+          WITH_YESTERDAY: ${{ inputs.with_yesterday && 'yes' || '' }}
+          BF_FROM: ${{ inputs.backfill_from }}
+          BF_TO: ${{ inputs.backfill_to }}
+        run: |
+          set +e
+          if [ -n "$BF_FROM" ]; then
+            python run.py --data-dir data --backfill "$BF_FROM" "${BF_TO:-$BF_FROM}"
+          elif [ -n "$WITH_YESTERDAY" ]; then
+            python run.py --data-dir data --mode "$MODE" --with-yesterday
+          else
+            python run.py --data-dir data --mode "$MODE"
+          fi
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 0 fine (one exchange may be down - recorded in status.json)
+          # 2 both exchanges failed      -> publish, then fail the run
+          # 3 backfill paused on errors  -> publish, then fail the run
+          # anything else: the code crashed -> stop here, publish nothing
+          case $code in 0|2|3) exit 0 ;; *) exit $code ;; esac
+
+      - name: Check nothing private is about to be published
+        run: python run.py --data-dir data --check-public
+
+      - name: Save the record book (one commit, replaces the last)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd data
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Record book $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M IST')"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data:data
+          echo "data branch: $(git rev-list --count HEAD) commit"
+
+      - name: Build the website
+        run: python build_site.py --data-dir data --out site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Report a failure if both exchanges were down
+        if: steps.collect.outputs.code == '2' || steps.collect.outputs.code == '3'
+        run: |
+          if [ "${{ steps.collect.outputs.code }}" = "2" ]; then
+            echo "::error::Both BSE and NSE failed this run. Existing data was kept and published."
+          else
+            echo "::error::Backfill paused because an exchange returned errors. Run it again later to resume."
+          fi
+          exit 1

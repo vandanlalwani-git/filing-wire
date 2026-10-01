@@ -100,57 +100,89 @@ def classify_nse(row):
     }
 
 
-# ------------------------------------------------------------ the merge
-def merge(bse_rows, nse_rows, classify_bse, sec_rows=None,
-          window=DEDUP_WINDOW_MIN):
+# ------------------------------------------------- duplicate pairing
+# Dual-listed companies file the same disclosure to both exchanges. This
+# is the agreed rule, carried over unchanged from the working collector:
+#
+#   * a twin is the same normalised company name within +/-30 minutes,
+#     compared on the FULL timestamp (never clock time alone)
+#   * pairing is ONE-TO-ONE: every candidate pair is sorted by time gap,
+#     smallest first, and each row can be used at most once
+#   * ISIN, where both rows have it, can only REJECT a match, never make one
+#   * of each pair the row with the higher severity is kept WHOLE - its own
+#     label, line, direction and attachment; ties go to BSE
+#   * nothing is ever stitched across the two rows
+#
+# The older "drop any NSE row with a BSE twin" version that used to live
+# here has been removed so there is only one rule.
+
+_TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+def pick_canonical(ev_sev, ev_source, partner_sev, promote_sev=True):
+    """True if `ev` is the row the feed should show. Higher severity wins;
+    ties go to BSE. With promote_sev off this is strict BSE-canonical."""
+    if not promote_sev:
+        return ev_source == "BSE"
+    if ev_sev != partner_sev:
+        return ev_sev > partner_sev
+    return ev_source == "BSE"
+
+
+def pair_rows(rows, window=DEDUP_WINDOW_MIN, promote_sev=True):
     """
-    bse_rows    : raw BSE announcement dicts
-    nse_rows    : raw NSE announcement dicts
-    classify_bse: the BSE classify() function
-    sec_rows    : optional bse_securities.json, used to attach ISIN where known
-    Returns (merged_rows, stats)
+    Greedy one-to-one pairing over a batch of classified rows, in place.
+
+    Each row is a dict with at least: uid, source ('BSE'/'NSE'),
+    company_key, filed_at ('YYYY-MM-DD HH:MM:SS'), sev, isin.
+    Sets on every row:
+        dup_of        uid of the kept twin, on the hidden row only
+        paired_with   uid of the other half, on both rows
+        promoted_from uid of the hidden BSE row, on a kept NSE row only
+    Any previous pairing is cleared first, so the same input always gives
+    the same output.
+
+    Returns [(kept_uid, hidden_uid, promoted_bool), ...]
     """
-    scrip2isin = {}
-    if sec_rows:
-        for s in sec_rows:
-            if s.get("ISIN_NUMBER"):
-                scrip2isin[str(s.get("SCRIP_CD"))] = s["ISIN_NUMBER"]
+    for r in rows:
+        r["dup_of"] = r["paired_with"] = r["promoted_from"] = None
 
-    out = []
-    index = {}                      # norm name -> [minutes]
+    by_company = {}
+    for r in rows:
+        if not r.get("company_key"):
+            continue
+        try:
+            t = datetime.strptime(r["filed_at"], _TS_FMT)
+        except (TypeError, ValueError):
+            continue
+        side = by_company.setdefault(r["company_key"], {"BSE": [], "NSE": []})
+        if r.get("source") in side:
+            side[r["source"]].append((r["uid"], t, r["sev"], r.get("isin")))
 
-    for x in bse_rows:
-        r = classify_bse(x)
-        key = norm_name(x.get("SLONGNAME"))
-        ts = x.get("NEWS_DT")
-        out.append({
-            "src": "BSE",
-            "co": (x.get("SLONGNAME") or "").replace(" Ltd", "").replace("-$", "").strip(),
-            "sym": None,
-            "isin": scrip2isin.get(str(x.get("SCRIP_CD"))),
-            "ts": ts, "t": (ts or "")[11:16],
-            "sev": r["sev"], "dir": r["dir"], "label": r["label"],
-            "line": r["line"],
-        })
-        index.setdefault(key, []).append(_mins(ts))
+    candidates = []
+    for sides in by_company.values():
+        for b_uid, b_t, b_sev, b_isin in sides["BSE"]:
+            for n_uid, n_t, n_sev, n_isin in sides["NSE"]:
+                gap = abs((n_t - b_t).total_seconds())
+                if gap > window * 60:
+                    continue
+                if b_isin and n_isin and b_isin != n_isin:
+                    continue        # ISIN only ever rejects, never matches
+                candidates.append((gap, b_uid, b_sev, n_uid, n_sev))
+    candidates.sort(key=lambda c: (c[0], c[1], c[3]))
 
-    dupes = 0
-    for row in nse_rows:
-        c = classify_nse(row)
-        key = norm_name(row.get("sm_name"))
-        t = _mins(row.get("sort_date"))
-        twins = index.get(key, [])
-        if any(abs(t - bt) <= window for bt in twins if bt >= 0):
-            dupes += 1
-            continue                # BSE copy already in the feed
-        out.append(c)
-
-    out.sort(key=lambda z: z["ts"] or "")
-    stats = {
-        "bse": len(bse_rows),
-        "nse": len(nse_rows),
-        "duplicates_dropped": dupes,
-        "merged": len(out),
-        "nse_unique": len(nse_rows) - dupes,
-    }
-    return out, stats
+    index = {r["uid"]: r for r in rows}
+    taken, made = set(), []
+    for gap, b_uid, b_sev, n_uid, n_sev in candidates:
+        if b_uid in taken or n_uid in taken:
+            continue
+        taken.add(b_uid)
+        taken.add(n_uid)
+        bse_wins = pick_canonical(b_sev, "BSE", n_sev, promote_sev)
+        keep, drop = (b_uid, n_uid) if bse_wins else (n_uid, b_uid)
+        index[drop]["dup_of"] = keep
+        index[drop]["paired_with"] = keep
+        index[keep]["paired_with"] = drop
+        index[keep]["promoted_from"] = None if bse_wins else drop
+        made.append((keep, drop, not bse_wins))
+    return made
