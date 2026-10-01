@@ -108,7 +108,11 @@ def classify_nse(row):
 #     compared on the FULL timestamp (never clock time alone)
 #   * pairing is ONE-TO-ONE: every candidate pair is sorted by time gap,
 #     smallest first, and each row can be used at most once
-#   * ISIN, where both rows have it, can only REJECT a match, never make one
+#   * ISIN, where both rows have it, can only REJECT a match, never make one;
+#     only the first 9 characters are compared (country + company code +
+#     security type, e.g. INE806T01). The rest changes when a company
+#     reissues its shares, and BSE's list and NSE's feed are often on
+#     different issues of the same share
 #   * of each pair the row with the higher severity is kept WHOLE - its own
 #     label, line, direction and attachment; ties go to BSE
 #   * nothing is ever stitched across the two rows
@@ -117,6 +121,7 @@ def classify_nse(row):
 # here has been removed so there is only one rule.
 
 _TS_FMT = "%Y-%m-%d %H:%M:%S"
+ISIN_PREFIX = 9          # INE806T01 012 vs INE806T01 020 -> same company, same share
 
 
 def pick_canonical(ev_sev, ev_source, partner_sev, promote_sev=True):
@@ -166,7 +171,7 @@ def pair_rows(rows, window=DEDUP_WINDOW_MIN, promote_sev=True):
                 gap = abs((n_t - b_t).total_seconds())
                 if gap > window * 60:
                     continue
-                if b_isin and n_isin and b_isin != n_isin:
+                if b_isin and n_isin and b_isin[:ISIN_PREFIX] != n_isin[:ISIN_PREFIX]:
                     continue        # ISIN only ever rejects, never matches
                 candidates.append((gap, b_uid, b_sev, n_uid, n_sev))
     candidates.sort(key=lambda c: (c[0], c[1], c[3]))

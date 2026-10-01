@@ -26,6 +26,14 @@ on:
         description: "Backfill end YYYY-MM-DD"
         type: string
         default: ""
+      repair_from:
+        description: "Re-pair past days after a rule change, start YYYY-MM-DD (no downloads)"
+        type: string
+        default: ""
+      repair_to:
+        description: "Re-pair end YYYY-MM-DD"
+        type: string
+        default: ""
   schedule:
     - cron: "*/5 * * * *"     # every 5 minutes; GitHub often runs these late
 
@@ -76,9 +84,13 @@ jobs:
           WITH_YESTERDAY: ${{ inputs.with_yesterday && 'yes' || '' }}
           BF_FROM: ${{ inputs.backfill_from }}
           BF_TO: ${{ inputs.backfill_to }}
+          RP_FROM: ${{ inputs.repair_from }}
+          RP_TO: ${{ inputs.repair_to }}
         run: |
           set +e
-          if [ -n "$BF_FROM" ]; then
+          if [ -n "$RP_FROM" ]; then
+            python run.py --data-dir data --repair "$RP_FROM" "${RP_TO:-$RP_FROM}"
+          elif [ -n "$BF_FROM" ]; then
             python run.py --data-dir data --backfill "$BF_FROM" "${BF_TO:-$BF_FROM}"
           elif [ -n "$WITH_YESTERDAY" ]; then
             python run.py --data-dir data --mode "$MODE" --with-yesterday

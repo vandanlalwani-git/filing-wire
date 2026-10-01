@@ -712,6 +712,47 @@ def backfill(data_dir, first, last, log=print):
     return 3 if stopped else 0
 
 
+# ================================================================== repair
+def repair(data_dir, first, last, log=print):
+    """
+    Re-pair past days from the record book after a matching-rule change.
+    No network at all: nothing is fetched from the exchanges and no PDF is
+    downloaded. Each day is paired together with the day before it, exactly
+    as a live run does. PDF results already in the cache are re-applied to
+    any filing that is now shown; nothing else about a filing changes.
+    """
+    snap = COUNTER.snapshot()
+    cache = _read(os.path.join(data_dir, "enrich_cache.json"), {})
+    d0 = datetime.strptime(first, "%Y-%m-%d")
+    d1 = datetime.strptime(last, "%Y-%m-%d")
+    totals = {"before": 0, "after": 0, "rows": 0}
+    day = d0
+    while day <= d1:
+        d = day.strftime("%Y-%m-%d")
+        prev = (day - timedelta(days=1)).strftime("%Y-%m-%d")
+        day += timedelta(days=1)
+        book = _read(os.path.join(data_dir, "book", d + ".json"), {}).get("rows", [])
+        if not book:
+            continue
+        before = sum(1 for r in book if r.get("dup"))
+        rows = load_day(data_dir, prev) + load_day(data_dir, d)
+        _pair_inplace(rows)
+        mine = [r for r in rows if r["ts"][:10] == d]
+        enrich([r for r in mine if not r.get("dup_of")], cache, None, None, 0, False,
+               log=lambda *_: None)
+        save_day(data_dir, d, mine)
+        after = sum(1 for r in mine if r.get("dup_of"))
+        totals["before"] += before
+        totals["after"] += after
+        totals["rows"] += len(mine)
+        log("  %s: %d filings, duplicates %d -> %d" % (d, len(mine), before, after))
+    _write(os.path.join(data_dir, "enrich_cache.json"), cache)
+    used = sum(COUNTER.since(snap).values())
+    log("repair: %d filings, duplicates merged %d -> %d, network requests: %d"
+        % (totals["rows"], totals["before"], totals["after"], used))
+    return 0 if used == 0 else 1
+
+
 # ============================================================ public check
 import re as _re                                                   # noqa: E402
 
@@ -753,6 +794,8 @@ def main():
     ap.add_argument("--day", action="append", help="rebuild a past IST day (repeatable)")
     ap.add_argument("--backfill", nargs=2, metavar=("FROM", "TO"),
                     help="one-time history load, YYYY-MM-DD YYYY-MM-DD")
+    ap.add_argument("--repair", nargs=2, metavar=("FROM", "TO"),
+                    help="re-pair past days from the record book, no network")
     ap.add_argument("--check-public", action="store_true",
                     help="scan the record book for anything private, then exit")
     ap.add_argument("--no-enrich", action="store_true", help="never download a PDF")
@@ -763,6 +806,10 @@ def main():
 
     if a.check_public:
         sys.exit(check_public(a.data_dir))
+    if a.repair:
+        for x in a.repair:
+            datetime.strptime(x, "%Y-%m-%d")           # reject anything else
+        sys.exit(repair(a.data_dir, a.repair[0], a.repair[1]))
     if a.backfill:
         for x in a.backfill:
             datetime.strptime(x, "%Y-%m-%d")           # reject anything else
