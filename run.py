@@ -272,6 +272,20 @@ def fetch_bse(day, known, full, log):
     return out, info
 
 
+def bse_pdf_session():
+    """PDFs on bseindia.com are fetched with exactly the headers the pinned
+    bse library sends. BSE refuses (HTTP 403) cloud machines that present an
+    outdated browser identity, so this must stay in step with the library."""
+    s = requests.Session()
+    tmp = tempfile.mkdtemp(prefix="bsehdr_")
+    try:
+        with BSE(download_folder=tmp) as b:
+            s.headers.update(dict(b.session.headers))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return s
+
+
 def nse_session():
     s = requests.Session()
     s.headers.update({
@@ -590,8 +604,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     _pair_inplace(rows)
 
     # 5. PDFs, only for rows the screen will show
-    bse_sess = requests.Session()
-    bse_sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/"})
+    bse_sess = bse_pdf_session()
     shown = [r for r in rows if not r.get("dup_of") and r["ts"][:10] in touched]
     pdf = enrich(shown, cache, bse_sess, nse_sess or bse_sess, max_pdfs, enrich_on, log)
 
