@@ -1,0 +1,5 @@
+# Pinned so a scheduled run never changes behaviour because a library updated.
+# Checked: every version below supports Python 3.9 (local Mac) and 3.12 (GitHub runner).
+requests==2.32.5
+bse==3.3.1
+pdfplumber==0.11.8

@@ -1,0 +1,39 @@
+# --- never public: local databases, logs, runtime state ---
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+soak_*
+current_soak_log.txt
+_tmp_*
+
+# --- downloaded documents and caches ---
+*.pdf
+bse_cache/
+
+# --- raw corpus dumps ---
+bse_filing_corpus*.json
+nse_corpus.json
+nse_filing_sample.json
+*.zip
+
+# --- the record book lives on the `data` branch, never on main ---
+data/
+out/
+
+# --- secrets (none are needed; this is a backstop) ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- tooling ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+dist/
+.DS_Store

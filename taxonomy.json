@@ -1,0 +1,568 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "built": "2026-09-12",
+    "basis": "5208 BSE filings, 2026-09-07 to 2026-09-11, 87 distinct category>subcategory pairs",
+    "severity_scale": {
+      "3": "CRITICAL - flare red, pulse, persist all day",
+      "2": "NOTABLE - flare in direction colour, medium persist",
+      "1": "ROUTINE - dim tick, short persist",
+      "0": "NOISE - do not flare, available in raw feed only"
+    },
+    "direction": "negative | positive | neutral",
+    "note": "CRITICALNEWS field from BSE is deliberately ignored - it is static per subcategory and mis-calibrated (AGM=1, auditor resignation=0)"
+  },
+  "rules": {
+    "Resignation of Statutory Auditors": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Auditor resigned"
+    },
+    "Resignation of Chief Financial Officer (CFO)": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "CFO resigned"
+    },
+    "Resignation of Managing Director": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "MD resigned"
+    },
+    "Resignation of Chairman": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Chairman resigned"
+    },
+    "Updates - Corporate Insolvency Resolution Process  (CIRP)": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Insolvency proceedings update"
+    },
+    "Outcome of meeting of Committee of Creditors": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Creditors committee outcome"
+    },
+    "Intimation of meeting of Committee of Creditors": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Creditors committee meeting called"
+    },
+    "Approval of Resolution plan by Tribunal": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Tribunal approved resolution plan"
+    },
+    "Strikes /Lockouts / Disturbances": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Strike / lockout / disturbance"
+    },
+    "Clarification": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Exchange sought clarification"
+    },
+    "Open Offer": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Open offer"
+    },
+    "Public Announcement-Open Offer": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Open offer announced"
+    },
+    "Scheme of Arrangement": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Scheme of arrangement"
+    },
+    "Restructuring": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Restructuring"
+    },
+    "Disclosures under Reg. 29(2) of SEBI (SAST) Regulations, 2011": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Substantial shareholding change"
+    },
+    "Disclosures under Reg. 29(1) of SEBI (SAST) Regulations, 2011": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Substantial shareholding change"
+    },
+    "Disclosures under Reg. 31(1) and 31(2) of SEBI (SAST) Regulations, 2011": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Promoter pledge disclosure"
+    },
+    "Disclosures under Reg. 10(5) in respect of acquisition under Reg. 10(1)(a) of SEBI (SAST) Reg. 2011": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Acquirer disclosure"
+    },
+    "Disclosures under Reg. 10(6) of SEBI (SAST) Regulations, 2011": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Acquirer disclosure"
+    },
+    "Disclosures under Reg. 10(7) of SEBI (SAST) Regulations, 2011": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Acquirer disclosure"
+    },
+    "Award of Order / Receipt of Order": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Order win"
+    },
+    "Acquisition": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Acquisition"
+    },
+    "Joint Venture": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Joint venture"
+    },
+    "Memorandum of Understanding /Agreements": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "MoU / agreement signed"
+    },
+    "Diversification / Disinvestment": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Diversification / disinvestment"
+    },
+    "Financial Results": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Results declared"
+    },
+    "Outcome of Board Meeting": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Board meeting outcome"
+    },
+    "Revision of outcome": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Board outcome revised"
+    },
+    "Credit Rating": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Credit rating update"
+    },
+    "Preferential Issue": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Preferential allotment"
+    },
+    "Qualified Institutional Placement": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "QIP"
+    },
+    "Raising of Funds": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Fund raise"
+    },
+    "Issue of Securities": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Securities issue"
+    },
+    "Allotment of Equity Shares": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Equity allotment"
+    },
+    "Daily Buy Back of equity shares": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Buyback in progress"
+    },
+    "Bonds / Right issue": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Bonds / rights issue"
+    },
+    "Dividend": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Dividend declared"
+    },
+    "Dividend Updates": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Dividend update"
+    },
+    "Dividend/AGM": {
+      "sev": 1,
+      "dir": "positive",
+      "label": "Dividend / AGM"
+    },
+    "Date of payment of Dividend": {
+      "sev": 1,
+      "dir": "positive",
+      "label": "Dividend payment date"
+    },
+    "Change in Management": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Management change"
+    },
+    "Resignation of Director": {
+      "sev": 2,
+      "dir": "negative",
+      "label": "Director resigned"
+    },
+    "Cessation": {
+      "sev": 2,
+      "dir": "negative",
+      "label": "Cessation of office"
+    },
+    "Appointment of Statutory Auditor/s": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Auditor appointed"
+    },
+    "New Listing": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "New listing"
+    },
+    "Monthly Business Updates": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Monthly business update"
+    },
+    "Reg. 32 (1), (3) - Statement of Deviation & Variation": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Deviation in fund use"
+    },
+    "Monitoring Agency Report": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Monitoring agency report"
+    },
+    "Conversion of Securities": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Securities converted"
+    },
+    "Board Meeting": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Board meeting called"
+    },
+    "Board Meeting Rescheduled": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Board meeting rescheduled"
+    },
+    "Press Release / Media Release": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Press release"
+    },
+    "Investor Presentation": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Investor presentation"
+    },
+    "Earnings Call Transcript": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Earnings call transcript"
+    },
+    "Analyst / Investor Meet": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Analyst / investor meet"
+    },
+    "Meeting Updates": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Meeting update"
+    },
+    "Change in Directorate": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Directorate change"
+    },
+    "Appointment of Company Secretary / Compliance Officer": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Company secretary appointed"
+    },
+    "Resignation of Company Secretary / Compliance Officer": {
+      "sev": 1,
+      "dir": "negative",
+      "label": "Company secretary resigned"
+    },
+    "Allotment of ESOP / ESPS": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "ESOP allotment"
+    },
+    "AGM": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "AGM notice"
+    },
+    "EGM": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "EGM notice"
+    },
+    "Postal Ballot": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Postal ballot"
+    },
+    "Court Convened Meeting": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Court convened meeting"
+    },
+    "Book Closure": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Book closure"
+    },
+    "Record Date": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Record date"
+    },
+    "Closure of Trading Window": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Trading window closed"
+    },
+    "Trading Plan under SEBI (PIT) Regulations, 2015": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Insider trading plan"
+    },
+    "Public Announcement": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Public announcement"
+    },
+    "Outcome without intimation": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Outcome filed without prior intimation"
+    },
+    "Change of Name": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Name change"
+    },
+    "Amendments to Memorandum & Articles of Association": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "MoA / AoA amended"
+    },
+    "Interest Rates Updates": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Interest rate update"
+    },
+    "Intimation of Repayment of Commercial Paper (CP)": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Commercial paper repaid"
+    },
+    "Reg. 57 (1) - Certificate of interest payment/Principal in case of NCD": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "NCD interest certificate"
+    },
+    "General": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "General disclosure"
+    },
+    "Newspaper Publication": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Newspaper publication"
+    },
+    "Reg. 34 (1) Annual Report": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Annual report"
+    },
+    "Business Responsibility and Sustainability Reporting (BRSR)": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "BRSR filing"
+    },
+    "Certificate under Reg. 74 (5) of SEBI (DP) Regulations, 2018": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Depository certificate"
+    },
+    "Reg.24(A)-Annual Secretarial Compliance": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Secretarial compliance report"
+    },
+    "Code of Conduct under SEBI (PIT) Regulations, 2015": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Code of conduct filing"
+    },
+    "Change in Registered Office Address": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Registered office moved"
+    },
+    "Change in Corporate Office Address": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Corporate office moved"
+    },
+    "Reg. 39 (3) - Details of Loss of Certificate / Duplicate Certificate": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Share certificate loss"
+    },
+    "Reg. 50 (2) - Intimation to the Exchange about meeting under 50(2)": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Reg 50(2) intimation"
+    },
+    "(none)": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Uncategorised filing"
+    }
+  },
+  "headline_overrides": [
+    {
+      "pattern": "(?i)\\bclarification\\s+(on|regarding)\\s+price\\s+movement",
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Exchange queried price movement"
+    },
+    {
+      "pattern": "(?i)\\bresignation\\b.{0,40}\\bauditor",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Auditor resigned"
+    },
+    {
+      "pattern": "(?i)\\b(fire|explosion|accident|fatal|casualt)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Incident at facility"
+    },
+    {
+      "pattern": "(?i)\\b(fraud|misappropriat|embezzl|forensic\\s+audit)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Fraud / forensic audit"
+    },
+    {
+      "pattern": "(?i)\\b(raid|search\\s+and\\s+seizure|income\\s+tax\\s+department|enforcement\\s+directorate|\\bED\\b|CBI|SFIO)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Regulatory / enforcement action"
+    },
+    {
+      "pattern": "(?i)\\b(default|defaulted)\\b.{0,30}\\b(payment|repayment|interest|loan)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Payment default"
+    },
+    {
+      "pattern": "(?i)\\bpledge",
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Share pledge"
+    },
+    {
+      "pattern": "(?i)\\b(invoc|revoc)ation\\b.{0,20}\\bpledge",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Pledge invoked"
+    },
+    {
+      "pattern": "(?i)\\bdowngrade",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Credit rating downgraded"
+    },
+    {
+      "pattern": "(?i)\\bupgrade",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Credit rating upgraded"
+    },
+    {
+      "pattern": "(?i)\\b(order|contract|LOI|letter\\s+of\\s+intent|work\\s+order|purchase\\s+order)\\b.{0,40}\\b(receiv|secur|award|bag|win|won)",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Order win"
+    },
+    {
+      "pattern": "(?i)\\bbonus\\s+issue",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Bonus issue"
+    },
+    {
+      "pattern": "(?i)\\bstock\\s+split|\\bsub-?division\\s+of\\s+share",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Stock split"
+    },
+    {
+      "pattern": "(?i)\\bbuy-?back",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Buyback"
+    },
+    {
+      "pattern": "(?i)\\bdelisting",
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Delisting"
+    },
+    {
+      "pattern": "(?i)\\bsuspension\\s+of\\s+trading|\\bsuspend",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Trading suspension"
+    },
+    {
+      "pattern": "(?i)\\b(NCLT|NCLAT|insolvency|liquidation|winding\\s+up)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Insolvency / tribunal matter"
+    },
+    {
+      "pattern": "(?i)\\bqip\\b|qualified\\s+institution",
+      "sev": 2,
+      "dir": "neutral",
+      "label": "QIP"
+    },
+    {
+      "pattern": "(?i)\\bcommission(ing|ed)\\b|\\bcapacity\\s+expansion|\\bnew\\s+plant",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Capacity expansion"
+    }
+  ]
+}

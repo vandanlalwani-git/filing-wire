@@ -1,0 +1,500 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "built": "2026-09-13",
+    "basis": "3210 NSE filings, 2026-09-06 to 2026-09-13, 83 distinct 'desc' values",
+    "note": "Mirrors the BSE severity scale so merged feeds are comparable. NSE's vocabulary catches several events BSE has no equivalent for: Spurt in Volume, Price movement, Action(s) taken or orders passed, Fraud/Default/Arrest, Disruption of Operations.",
+    "severity": {
+      "3": "CRITICAL",
+      "2": "NOTABLE",
+      "1": "ROUTINE",
+      "0": "NOISE"
+    },
+    "direction": "negative | positive | neutral (neutral = genuinely unknown from metadata)"
+  },
+  "rules": {
+    "Resignation of Statutory Auditor": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Auditor resigned"
+    },
+    "Change in Auditors": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Auditor change"
+    },
+    "Fraud/Default/Arrest": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Fraud / default / arrest"
+    },
+    "Corporate Insolvency Resolution Process": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Insolvency proceedings"
+    },
+    "Strikes/Lockouts/Disturbances": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Strike / lockout"
+    },
+    "Disruption of Operations": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Operations disrupted"
+    },
+    "Suspension of Trading": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Trading suspended"
+    },
+    "Action(s) taken or orders passed": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Regulatory action taken"
+    },
+    "Action(s) initiated or orders passed": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Regulatory action initiated"
+    },
+    "Delay/default in the payment of fines/penalties/dues etc. to authority": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Payment default to authority"
+    },
+    "Pendency of Litigation(s)/dispute(s) or the outcome impacting the Company": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Material litigation"
+    },
+    "Granting/withdrawal/surrender/cancellation/suspension of key licenses/ regulatory approvals": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Licence / approval change"
+    },
+    "Postponement of commercial production/operations": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Production postponed"
+    },
+    "Price movement": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Exchange queried price movement"
+    },
+    "Spurt in Volume": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Exchange queried volume spurt"
+    },
+    "Rumour Verification - Regulation 30(11)": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Rumour verification"
+    },
+    "News Verification": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "News verification sought"
+    },
+    "Disclosure of material issue": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Material issue disclosed"
+    },
+    "Scheme of Arrangement": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Scheme of arrangement"
+    },
+    "Other Restructuring": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Restructuring"
+    },
+    "Disclosure under SEBI Takeover Regulations": {
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Takeover disclosure"
+    },
+    "Demise": {
+      "sev": 3,
+      "dir": "negative",
+      "label": "Demise of key person"
+    },
+    "Resignation of Director/KMP/SMP": {
+      "sev": 2,
+      "dir": "negative",
+      "label": "Director / KMP resigned"
+    },
+    "Resignation": {
+      "sev": 2,
+      "dir": "negative",
+      "label": "Resignation"
+    },
+    "Cessation": {
+      "sev": 2,
+      "dir": "negative",
+      "label": "Cessation of office"
+    },
+    "Clarification - Financial Results": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Results clarification sought"
+    },
+    "Reply to Clarification- Financial results": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Reply to results clarification"
+    },
+    "Credit Rating": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Credit rating update"
+    },
+    "Credit Rating- New": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "New credit rating"
+    },
+    "Credit Rating- Revision": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Credit rating revised"
+    },
+    "Credit Rating- Others": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Credit rating update"
+    },
+    "Bagging/Receiving of orders/contracts": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Order win"
+    },
+    "Awarding of order(s)/contract(s)": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Order awarded"
+    },
+    "Acquisition": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Acquisition"
+    },
+    "Amalgamation/Merger": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Amalgamation / merger"
+    },
+    "Agreements": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Agreement signed"
+    },
+    "Memorandum of Understanding/Agreements": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "MoU signed"
+    },
+    "Arrangements for strategic, technical, manufacturing, or marketing tie up": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Strategic tie-up"
+    },
+    "Commencement of commercial production/operations": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Production commenced"
+    },
+    "Capacity addition": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Capacity added"
+    },
+    "Product launch": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Product launch"
+    },
+    "Sale or disposal": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Sale / disposal"
+    },
+    "Diversification/Disinvestment": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Diversification / disinvestment"
+    },
+    "Outcome of Board Meeting": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Board meeting outcome"
+    },
+    "Change in Management": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Management change"
+    },
+    "Allotment of Securities": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Securities allotted"
+    },
+    "Issue of Securities": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Securities issue"
+    },
+    "Rights Issue": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Rights issue"
+    },
+    "Qualified Institutional Placement": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "QIP"
+    },
+    "Buyback": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Buyback"
+    },
+    "Closure of Buy Back": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Buyback closed"
+    },
+    "Dividend": {
+      "sev": 2,
+      "dir": "positive",
+      "label": "Dividend"
+    },
+    "Redemption": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Redemption"
+    },
+    "Conversion": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Conversion of securities"
+    },
+    "Giving guarantees/indemnity/ becoming a surety for third party": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Guarantee given"
+    },
+    "Monitoring Agency Report": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Monitoring agency report"
+    },
+    "Monthly Business Updates": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Monthly business update"
+    },
+    "Appointment": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Appointment"
+    },
+    "Options to purchase securities": {
+      "sev": 2,
+      "dir": "neutral",
+      "label": "Securities purchase option"
+    },
+    "Change in Director(s)": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Directorate change"
+    },
+    "Change in Company Secretary/Compliance Officer": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Company secretary change"
+    },
+    "Shareholders meeting": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Shareholders meeting"
+    },
+    "Extension of Annual General Meeting": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "AGM extended"
+    },
+    "Record Date": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Record date"
+    },
+    "Press Release": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Press release"
+    },
+    "Press Release (Revised)": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Press release (revised)"
+    },
+    "Investor Presentation": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Investor presentation"
+    },
+    "Analysts/Institutional Investor Meet/Con. Call Updates": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Analyst / investor meet"
+    },
+    "Committee Meeting Updates": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Committee meeting"
+    },
+    "ESOP/ESOS/ESPS": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "ESOP allotment"
+    },
+    "Trading Window": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Trading window"
+    },
+    "Trading Plan under PIT": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Insider trading plan"
+    },
+    "Amendment to AOA/MOA": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "AoA / MoA amended"
+    },
+    "Name Change": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Name change"
+    },
+    "Corrigendum": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Corrigendum"
+    },
+    "Addendum": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Addendum"
+    },
+    "Updates": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Update"
+    },
+    "Others": {
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Other disclosure"
+    },
+    "Copy of Newspaper Publication": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Newspaper publication"
+    },
+    "General Updates": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "General update"
+    },
+    "Address Change": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Address change"
+    },
+    "Loss of Share Certificates": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Share certificate loss"
+    },
+    "Certificate under SEBI (Depositories and Participants) Regulations, 2018": {
+      "sev": 0,
+      "dir": "neutral",
+      "label": "Depository certificate"
+    }
+  },
+  "text_overrides": [
+    {
+      "pattern": "(?i)\\bdowngrad",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Credit rating downgraded"
+    },
+    {
+      "pattern": "(?i)\\bupgrad",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Credit rating upgraded"
+    },
+    {
+      "pattern": "(?i)\\breaffirm",
+      "sev": 1,
+      "dir": "neutral",
+      "label": "Credit rating reaffirmed"
+    },
+    {
+      "pattern": "(?i)\\bresignation\\b.{0,40}\\bauditor",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Auditor resigned"
+    },
+    {
+      "pattern": "(?i)\\b(fire|explosion|fatal|casualt)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Incident at facility"
+    },
+    {
+      "pattern": "(?i)\\b(fraud|misappropriat|embezzl|forensic\\s+audit)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Fraud / forensic audit"
+    },
+    {
+      "pattern": "(?i)\\b(raid|search\\s+and\\s+seizure|enforcement\\s+directorate|SFIO)",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Enforcement action"
+    },
+    {
+      "pattern": "(?i)\\bpledge",
+      "sev": 3,
+      "dir": "negative",
+      "label": "Share pledge"
+    },
+    {
+      "pattern": "(?i)\\bdelisting",
+      "sev": 3,
+      "dir": "neutral",
+      "label": "Delisting"
+    },
+    {
+      "pattern": "(?i)\\bbonus\\s+issue",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Bonus issue"
+    },
+    {
+      "pattern": "(?i)\\bstock\\s+split|sub-?division\\s+of\\s+share",
+      "sev": 2,
+      "dir": "positive",
+      "label": "Stock split"
+    }
+  ]
+}
