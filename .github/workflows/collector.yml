@@ -3,7 +3,7 @@ name: Collector
 # Fetches BSE and NSE filings, classifies them with fixed rules (no AI),
 # saves the record book to the `data` branch and publishes the website.
 #
-# Turned on by uncommenting the schedule below. Until then: manual only.
+# Runs every 5 minutes on GitHub's free schedule (often 5-30 minutes late).
 # Backfill: run it by hand with "backfill from" / "backfill to" filled in.
 
 on:
@@ -26,8 +26,8 @@ on:
         description: "Backfill end YYYY-MM-DD"
         type: string
         default: ""
-  # schedule:
-  #   - cron: "*/5 * * * *"
+  schedule:
+    - cron: "*/5 * * * *"     # every 5 minutes; GitHub often runs these late
 
 # Never two runs at once: they would fight over the data branch.
 concurrency:
