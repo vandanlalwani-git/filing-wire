@@ -3,9 +3,11 @@
 Assemble the public website folder from the built screen and the record book.
 
 Only what the screen reads is published to the website:
-    data/days/<day>.json   one file per day
+    data/days/<day>.json   one file per day; severity-0 "noise" is left out,
+                           as the taxonomy says (raw feed only) and v5 shows
     data/days/index.json   the list of days that exist (for the date picker)
     data/status.json       freshness and per-exchange health
+    data/symbols.json      trading symbol -> company name, for CSV import
 The internal record book (book/) and the PDF cache stay on the data branch.
 
     python build_site.py --data-dir data --out site [--app web/dist]
@@ -46,10 +48,21 @@ def main():
     if os.path.isdir(src_days):
         for name in sorted(os.listdir(src_days)):
             if len(name) == 15 and name.endswith(".json"):        # YYYY-MM-DD.json
-                shutil.copy2(os.path.join(src_days, name), out_days)
+                with open(os.path.join(src_days, name), encoding="utf-8") as f:
+                    d = json.load(f)
+                d["rows"] = [r for r in d.get("rows", []) if r.get("sev", 0) >= 1]
+                with open(os.path.join(out_days, name), "w", encoding="utf-8") as f:
+                    json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
                 days.append(name[:10])
     with open(os.path.join(out_days, "index.json"), "w", encoding="utf-8") as f:
         json.dump({"days": days}, f, separators=(",", ":"))
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "bse_securities.json"), encoding="utf-8") as f:
+        symbols = {(x.get("scrip_id") or "").strip().upper(): x.get("Scrip_Name")
+                   for x in json.load(f) if x.get("scrip_id") and x.get("Scrip_Name")}
+    with open(os.path.join(a.out, "data", "symbols.json"), "w", encoding="utf-8") as f:
+        json.dump(symbols, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
     status = os.path.join(a.data_dir, "status.json")
     if os.path.isfile(status):
