@@ -41,8 +41,10 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from classify import classify                                     # noqa: E402
+from classify import classify, normalise_text                     # noqa: E402
+from classify import RULES as BSE_RULES, OVERRIDES as BSE_OVERRIDES   # noqa: E402
 from merge import classify_nse, norm_name, pair_rows              # noqa: E402
+from merge import NSE_RULES, NSE_OVERRIDES                        # noqa: E402
 from enrich import (extract_amount, extract_pledge,               # noqa: E402
                     pdf_to_text, format_amount)
 
@@ -144,6 +146,39 @@ def load_reference():
 
 
 # =================================================================== rows
+def _subject(raw):
+    """BSE's subject line is 'Company - code - Category-Subcategory'; keep the part
+    after the company name and code."""
+    s = normalise_text(raw.get("NEWSSUB"))
+    parts = s.split(" - ", 2)
+    return parts[2] if len(parts) == 3 else s
+
+
+def _why_bse(raw, c):
+    """How classify() decided: a headline phrase, or the category the company chose."""
+    if c.get("matched_by") == "headline-override":
+        h = normalise_text(raw.get("HEADLINE"))
+        for rx, _ in BSE_OVERRIDES:
+            m = rx.search(h)
+            if m:
+                return {"by": "phrase", "text": m.group(0)}
+    return {"by": "category", "text": (raw.get("SUBCATNAME") or "").strip() or "(none)"}
+
+
+def _why_nse(raw):
+    """Same for classify_nse(): mirrors its override loop exactly."""
+    desc = (raw.get("desc") or "").strip()
+    text = (raw.get("attchmntText") or "").strip()
+    base = NSE_RULES.get(desc) or {"sev": 1}
+    for rx, ov in NSE_OVERRIDES:
+        m = rx.search(text) or rx.search(desc)
+        if m:
+            if ov["sev"] >= base["sev"]:
+                return {"by": "phrase", "text": m.group(0)}
+            break
+    return {"by": "category", "text": desc or "(none)"}
+
+
 def row_from_bse(raw, sectors, scrip):
     ts = (raw.get("NEWS_DT") or raw.get("DT_TM") or "").replace("T", " ")[:19]
     if len(ts) != 19:
@@ -162,6 +197,10 @@ def row_from_bse(raw, sectors, scrip):
         "sev": c["sev"], "dir": c["dir"], "lab": c["label"], "line": c["line"],
         "sub": (raw.get("SUBCATNAME") or "").strip(),
         "att": raw.get("ATTACHMENTNAME") or None,
+        "hl": normalise_text(raw.get("HEADLINE")),          # full, as BSE sends it
+        "subj": _subject(raw),
+        "cat": (raw.get("CATEGORYNAME") or "").strip(),
+        "why": _why_bse(raw, c),
     }
 
 
@@ -187,6 +226,8 @@ def row_from_nse(raw, sectors):
         "sev": c["sev"], "dir": c["dir"], "lab": c["label"], "line": c["line"],
         "sub": (raw.get("desc") or "").strip(),
         "att": raw.get("attchmntFile") or None,
+        "hl": normalise_text(raw.get("attchmntText")),      # full, as NSE sends it
+        "why": _why_nse(raw),
     }
 
 
@@ -387,9 +428,24 @@ def apply_enrichment(row, entry):
     if entry.get("s") == "pledge":
         pl = entry["pl"]
         row["dir"], row["lab"], row["line"] = pl["dir"], pl["label"], pl["label"]
+        row["why"] = {"by": "pdf", "text": pl["label"]}
     elif entry.get("s") == "amount":
         row["amt"] = entry["amt"]
         row["line"] = "%s - %s" % (row["lab"], format_amount(entry["amt"]))
+
+
+def reapply_cached(rows, days, cache):
+    """Hidden duplicates are never downloaded, but if their PDF was already read
+    (while they were shown, or by their twin's run) keep that result on them:
+    the screen shows the other exchange's version when a row is expanded."""
+    for r in rows:
+        if not r.get("dup_of") or r["ts"][:10] not in days:
+            continue
+        want_amount, want_pledge = wants_pdf(r)
+        if want_amount or want_pledge:
+            e = cache.get(cache_key(r))
+            if e and e.get("s") in ("amount", "pledge"):
+                apply_enrichment(r, e)
 
 
 def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
@@ -468,7 +524,7 @@ def _write(path, obj):
 #                    attachment, first-seen time, which run found it)
 #   days/<day>.json  what the screen reads: shown filings only, v5's fields
 BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "dir", "lab",
-               "line", "amt", "sub", "att", "fs", "by")
+               "line", "amt", "sub", "att", "fs", "by", "hl", "subj", "cat", "why")
 SCREEN_FIELDS = ("id", "t", "ts", "co", "sec", "sev", "dir", "lab", "line")
 
 
@@ -607,6 +663,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     bse_sess = bse_pdf_session()
     shown = [r for r in rows if not r.get("dup_of") and r["ts"][:10] in touched]
     pdf = enrich(shown, cache, bse_sess, nse_sess or bse_sess, max_pdfs, enrich_on, log)
+    reapply_cached(rows, touched, cache)
 
     # 6. write
     written = {}
@@ -685,7 +742,7 @@ def _pair_inplace(rows):
 BACKFILL_DAY_PAUSE = 5          # seconds between days, on top of page delays
 
 
-def backfill(data_dir, first, last, log=print):
+def backfill(data_dir, first, last, log=print, progress="backfill.json"):
     """
     One-time history load, day by day, oldest first. Gentle: the normal page
     delay, a pause between days, no PDFs. Resumable: days already confirmed
@@ -694,7 +751,7 @@ def backfill(data_dir, first, last, log=print):
 
     Returns 0 when every day is done, 3 when it stopped early.
     """
-    prog_path = os.path.join(data_dir, "book", "backfill.json")
+    prog_path = os.path.join(data_dir, "book", progress)
     prog = _read(prog_path, {})
     d0 = datetime.strptime(first, "%Y-%m-%d")
     d1 = datetime.strptime(last, "%Y-%m-%d")
@@ -762,6 +819,7 @@ def repair(data_dir, first, last, log=print):
         mine = [r for r in rows if r["ts"][:10] == d]
         enrich([r for r in mine if not r.get("dup_of")], cache, None, None, 0, False,
                log=lambda *_: None)
+        reapply_cached(mine, {d}, cache)
         save_day(data_dir, d, mine)
         after = sum(1 for r in mine if r.get("dup_of"))
         totals["before"] += before
@@ -816,6 +874,8 @@ def main():
     ap.add_argument("--day", action="append", help="rebuild a past IST day (repeatable)")
     ap.add_argument("--backfill", nargs=2, metavar=("FROM", "TO"),
                     help="one-time history load, YYYY-MM-DD YYYY-MM-DD")
+    ap.add_argument("--refetch", nargs=2, metavar=("FROM", "TO"),
+                    help="re-read past days from the exchanges once (to add stored text)")
     ap.add_argument("--repair", nargs=2, metavar=("FROM", "TO"),
                     help="re-pair past days from the record book, no network")
     ap.add_argument("--check-public", action="store_true",
@@ -832,6 +892,10 @@ def main():
         for x in a.repair:
             datetime.strptime(x, "%Y-%m-%d")           # reject anything else
         sys.exit(repair(a.data_dir, a.repair[0], a.repair[1]))
+    if a.refetch:
+        for x in a.refetch:
+            datetime.strptime(x, "%Y-%m-%d")
+        sys.exit(backfill(a.data_dir, a.refetch[0], a.refetch[1], progress="refetch.json"))
     if a.backfill:
         for x in a.backfill:
             datetime.strptime(x, "%Y-%m-%d")           # reject anything else

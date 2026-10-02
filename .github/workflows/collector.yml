@@ -26,6 +26,14 @@ on:
         description: "Backfill end YYYY-MM-DD"
         type: string
         default: ""
+      refetch_from:
+        description: "One-time re-read of past days to add stored text, start YYYY-MM-DD"
+        type: string
+        default: ""
+      refetch_to:
+        description: "Re-read end YYYY-MM-DD"
+        type: string
+        default: ""
       repair_from:
         description: "Re-pair past days after a rule change, start YYYY-MM-DD (no downloads)"
         type: string
@@ -84,11 +92,15 @@ jobs:
           WITH_YESTERDAY: ${{ inputs.with_yesterday && 'yes' || '' }}
           BF_FROM: ${{ inputs.backfill_from }}
           BF_TO: ${{ inputs.backfill_to }}
+          RF_FROM: ${{ inputs.refetch_from }}
+          RF_TO: ${{ inputs.refetch_to }}
           RP_FROM: ${{ inputs.repair_from }}
           RP_TO: ${{ inputs.repair_to }}
         run: |
           set +e
-          if [ -n "$RP_FROM" ]; then
+          if [ -n "$RF_FROM" ]; then
+            python run.py --data-dir data --refetch "$RF_FROM" "${RF_TO:-$RF_FROM}"
+          elif [ -n "$RP_FROM" ]; then
             python run.py --data-dir data --repair "$RP_FROM" "${RP_TO:-$RP_FROM}"
           elif [ -n "$BF_FROM" ]; then
             python run.py --data-dir data --backfill "$BF_FROM" "${BF_TO:-$BF_FROM}"
