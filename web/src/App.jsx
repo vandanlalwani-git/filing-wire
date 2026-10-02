@@ -77,6 +77,33 @@ export default function App() {
 
   const isToday = day === today
 
+  // expanded rows; their details load from a separate file on first use
+  const [open, setOpen] = useState(() => new Set())
+  const [det, setDet] = useState({ day: null, rows: null, state: 'idle' })
+  useEffect(() => { setOpen(new Set()); setDet({ day: null, rows: null, state: 'idle' }) }, [day])
+  const loadDetails = async () => {
+    setDet(d => ({ ...d, day, state: 'loading' }))
+    try {
+      const r = await fetch(`./data/details/${day}.json`, { cache: 'no-cache' })
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      const j = await r.json()
+      setDet({ day, rows: j.rows || {}, state: 'ready' })
+    } catch {
+      setDet({ day, rows: null, state: 'error' })
+    }
+  }
+  const toggle = id => {
+    const willOpen = !open.has(id)
+    setOpen(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+    // first expand of the day, a retry after an error, or a row newer than the loaded file
+    if (willOpen && (det.day !== day || det.state === 'error' || det.state === 'idle' ||
+                     (det.state === 'ready' && !det.rows[id]))) loadDetails()
+  }
+
   return (
     <div id="shell">
       <div id="perf"></div>
@@ -100,6 +127,7 @@ export default function App() {
         limit={limit} setLimit={setLimit}
         isWatched={isWatched} toggleWatch={toggleWatch}
         watchEmpty={sevF === 'watch' && watchNames.length === 0}
+        open={open} toggle={toggle} details={det.rows} detState={det.state} today={today}
       />
     </div>
   )

@@ -328,6 +328,28 @@ header{
 #watchbar input[type=file]{display:none;}
 #watchbar .wb-msg{text-transform:none;letter-spacing:0;font-size:11px;color:var(--ink-2);}
 
+/* expandable rows: tap anywhere on a row; Enter/Space when focused */
+.entry{cursor:pointer;}
+.e-sum:focus-visible{outline:2px solid var(--watch);outline-offset:3px;border-radius:2px;}
+.e-chev{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1;color:var(--faint);
+  margin-left:auto;padding-left:6px;
+}
+.entry:hover .e-chev,.entry.open .e-chev{color:var(--ink-2);}
+.e-xwrap{grid-column:3 / -1;cursor:auto;}
+.xp{border-top:1px dashed var(--rule-2);margin-top:2px;padding:4px 0 6px;max-width:74ch;}
+.xp .xh{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--mute);margin:14px 0 4px;
+}
+.xp p{font-size:13.5px;line-height:1.55;color:var(--ink-2);overflow-wrap:anywhere;white-space:pre-wrap;}
+.xp p+p{margin-top:3px;}
+.xp .xs{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--mute);}
+.xp .xm{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-2);}
+.xp .xnote{font-size:12px;color:var(--mute);font-style:italic;}
+.xp a{color:var(--watch);text-decoration:underline;text-underline-offset:2px;}
+.xp a:hover{color:var(--ink);}
+
 /* footer line */
 #foot{
   padding:30px 0 0;text-align:center;
@@ -380,4 +402,6 @@ header{
   .entry.s1 .e-line{font-size:12.5px;}
   .star{width:36px;height:36px;font-size:16px;padding:0;}
   #foot{padding:24px 8px 0;}
+  .e-xwrap{grid-column:1 / -1;padding:0 4px 0 6px;}
+  .xp a{display:inline-block;padding:6px 0;}       /* comfortable tap target */
 }
