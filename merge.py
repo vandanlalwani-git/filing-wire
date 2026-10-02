@@ -124,6 +124,79 @@ _TS_FMT = "%Y-%m-%d %H:%M:%S"
 ISIN_PREFIX = 9          # INE806T01 012 vs INE806T01 020 -> same company, same share
 
 
+# ------------------------------------------------- merge tightening
+# A company often files several different things within minutes (AGM result,
+# trading-window closure, record date ...). Pairing by name and time alone
+# then joins the wrong halves. Two rows are NOT paired when both have a
+# specific kind and the kinds clearly differ. Kinds come from the label for
+# routine filings (where the exchanges' categories are reliable) and from the
+# events found in the filing's own text. Labels that can hold many kinds of
+# news (General, Insolvency / tribunal matter, Regulatory action ...) have no
+# kind, so they can still pair; that is how BSE's "Order win" label on a tax
+# order still pairs with NSE's "Regulatory action" version of the same filing.
+# Checked on 399 hand-labelled pairs from Sept 2026 (tests/golden_pairs.json).
+KIND_RULES = [
+ (None, r"^(general disclosure|general update|update|updates|press release.*|board meeting outcome|board outcome revised|outcome filed without prior intimation|material issue disclosed|newspaper publication|disclosure|other disclosure|uncategorised filing|meeting update|committee meeting|addendum|public announcement|clarification|corrigendum|revision of outcome|revised outcome)$"),
+ ("credit rating", r"credit rating|rating"),
+ ("trading window", r"trading window"),
+ ("insider / takeover", r"insider|sast|substantial shareholding|pledge|takeover|encumbr|open offer|promoter|structural digital database|acquirer"),
+ ("shareholder meeting / annual report", r"agm|egm|shareholders meeting|postal ballot|court convened|annual report|voting result|scrutini|e-voting"),
+ ("board meeting notice", r"board meeting called|board meeting cancelled|board meeting intimation"),
+ ("results", r"result|integrated filing- financial|financial statement"),
+ ("investor meeting", r"analyst|investor|earnings call|transcript|conference call|presentation"),
+ ("people", r"management change|appoint|resign|retire|director|cessation|kmp|company secretary|auditor|ceo|cfo|chairman|demise|senior management"),
+ ("record date / dividend", r"record date|book closure|dividend"),
+ ("monthly business update", r"monthly business"),
+ ("operations", r"production|operations|incident|capacity|strike|lockout|disrupt|closure of operations"),
+ ("insolvency", r"creditors|resolution plan|insolvency|cirp"),
+ ("compliance filing", r"certificate loss|duplicate share|registrar|share transfer|address change"),
+ ("regulatory / legal", r"default|rumour"),
+ ("capital / financing", r"allot|securities|esop|preferential|qip|placement|rights issue|raising of funds|fund rais|bonus|split|buyback|buy back|warrant|ncd|debenture|bond|conversion|redemption|delisting|commercial paper|interest rate|guarantee|57 \(|capital|share"),
+ ("deal / business", r"acqui|agreement|\bmou\b|joint venture|order|contract|amalgamation|merger|scheme of arrangement|restructuring|diversification|disinvest|sale|disposal|tie.?up|new line|rescission|termination|incorporation|subsidiary|investment|product"),
+ ("regulatory / legal", r"regulatory|litigation|fraud|default|penalt|\bfine\b|clarification|queried|news verification|rumour|spurt|price movement|suspension|licen|tax|enforcement|nclt|order passed|show cause"),
+ ("compliance filing", r"brsr|moa|aoa|certificate|monitoring agency|deviation|related party|compliance|governance|secretarial|shareholding pattern|loss of share|duplicate|kyc|reconciliation|name change|registered office|code of conduct|asset liability"),
+]
+# routine kinds, where the exchanges' own categories are reliable; the other
+# kinds (operations, insolvency, regulatory / legal) cover too much to judge
+STRICT_KINDS = {"credit rating", "trading window", "insider / takeover",
+                "shareholder meeting / annual report", "board meeting notice", "results",
+                "investor meeting", "people", "record date / dividend",
+                "monthly business update", "compliance filing", "capital / financing",
+                "deal / business"}
+_KIND_RX = [(k, re.compile(rx, re.I)) for k, rx in KIND_RULES]
+# events found in the text that identify one specific filing; a shared one
+# means both rows report the same thing even if their labels disagree
+SAME_EVENT = {"TAX-DEMAND", "RULING-FAV", "RULING-MIXED", "ORDER-WIN", "COMPOUNDING",
+              "SEBI-ACTION", "NCLT-SCHEME", "FIRE", "SEARCH", "DEFAULT", "RATING-UP",
+              "RATING-DOWN", "AUD-RESIGN", "COMMISSION", "DRUG-OK", "DRUG-483",
+              "PLEDGE-NEW", "PLEDGE-REL", "FRAUD", "INSOLV-ADMIT", "INSOLV-DISMISSED",
+              "SHUTDOWN", "COURT-STEP", "CIRP-ROUTINE", "ORDER-UPDATE", "JC-BONUS"}
+COMPATIBLE = {frozenset({"record date / dividend", "capital / financing"})}
+
+
+def label_kind(label):
+    l = (label or "").strip()
+    for k, rx in _KIND_RX:
+        if rx.search(l):
+            return k if k in STRICT_KINDS else None
+    return None
+
+
+def clearly_different(b, n):
+    """b, n: rows with 'lab' and 'ev' (set of event rule ids from the text)."""
+    eb, en = b.get("ev") or set(), n.get("ev") or set()
+    if eb & en & SAME_EVENT:
+        return False
+    kb, kn = label_kind(b.get("lab")), label_kind(n.get("lab"))
+    if "EXCH-QUERY" in eb:
+        kb = "exchange query"
+    if "EXCH-QUERY" in en:
+        kn = "exchange query"
+    if not kb or not kn or kb == kn:
+        return False
+    return frozenset({kb, kn}) not in COMPATIBLE
+
+
 def pick_canonical(ev_sev, ev_source, partner_sev, promote_sev=True):
     """True if `ev` is the row the feed should show. Higher severity wins;
     ties go to BSE. With promote_sev off this is strict BSE-canonical."""
@@ -134,12 +207,13 @@ def pick_canonical(ev_sev, ev_source, partner_sev, promote_sev=True):
     return ev_source == "BSE"
 
 
-def pair_rows(rows, window=DEDUP_WINDOW_MIN, promote_sev=True):
+def pair_rows(rows, window=DEDUP_WINDOW_MIN, promote_sev=True, tighten=True):
     """
     Greedy one-to-one pairing over a batch of classified rows, in place.
 
     Each row is a dict with at least: uid, source ('BSE'/'NSE'),
-    company_key, filed_at ('YYYY-MM-DD HH:MM:SS'), sev, isin.
+    company_key, filed_at ('YYYY-MM-DD HH:MM:SS'), sev, isin; and for merge
+    tightening, lab and ev (see clearly_different).
     Sets on every row:
         dup_of        uid of the kept twin, on the hidden row only
         paired_with   uid of the other half, on both rows
@@ -162,17 +236,19 @@ def pair_rows(rows, window=DEDUP_WINDOW_MIN, promote_sev=True):
             continue
         side = by_company.setdefault(r["company_key"], {"BSE": [], "NSE": []})
         if r.get("source") in side:
-            side[r["source"]].append((r["uid"], t, r["sev"], r.get("isin")))
+            side[r["source"]].append((r["uid"], t, r["sev"], r.get("isin"), r))
 
     candidates = []
     for sides in by_company.values():
-        for b_uid, b_t, b_sev, b_isin in sides["BSE"]:
-            for n_uid, n_t, n_sev, n_isin in sides["NSE"]:
+        for b_uid, b_t, b_sev, b_isin, b_row in sides["BSE"]:
+            for n_uid, n_t, n_sev, n_isin, n_row in sides["NSE"]:
                 gap = abs((n_t - b_t).total_seconds())
                 if gap > window * 60:
                     continue
                 if b_isin and n_isin and b_isin[:ISIN_PREFIX] != n_isin[:ISIN_PREFIX]:
                     continue        # ISIN only ever rejects, never matches
+                if tighten and clearly_different(b_row, n_row):
+                    continue        # two different filings by the same company
                 candidates.append((gap, b_uid, b_sev, n_uid, n_sev))
     candidates.sort(key=lambda c: (c[0], c[1], c[3]))
 

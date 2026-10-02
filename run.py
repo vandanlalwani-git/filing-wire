@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify import classify, normalise_text                     # noqa: E402
 from classify import RULES as BSE_RULES, OVERRIDES as BSE_OVERRIDES   # noqa: E402
 from merge import classify_nse, norm_name, pair_rows              # noqa: E402
+import events                                                      # noqa: E402
 from merge import NSE_RULES, NSE_OVERRIDES                        # noqa: E402
 from enrich import (extract_amount, extract_pledge,               # noqa: E402
                     pdf_to_text, format_amount)
@@ -204,7 +205,7 @@ def row_from_bse(raw, sectors, scrip):
         "ck": norm_name(raw.get("SLONGNAME")),
         "isin": ref.get("isin"),
         "sec": sectors.get(ref.get("sym") or "", "Other"),
-        "sev": c["sev"], "dir": c["dir"], "lab": c["label"], "line": c["line"],
+        "sev": c["sev"], "dir": c["dir"], "dc": c["dir"], "lab": c["label"], "line": c["line"],
         "sub": (raw.get("SUBCATNAME") or "").strip(),
         "att": raw.get("ATTACHMENTNAME") or None,
         "hl": normalise_text(raw.get("HEADLINE")),          # full, as BSE sends it
@@ -233,7 +234,7 @@ def row_from_nse(raw, sectors):
         "ck": norm_name(raw.get("sm_name")),
         "isin": raw.get("sm_isin") or None,
         "sec": sectors.get(sym, "Other"),
-        "sev": c["sev"], "dir": c["dir"], "lab": c["label"], "line": c["line"],
+        "sev": c["sev"], "dir": c["dir"], "dc": c["dir"], "lab": c["label"], "line": c["line"],
         "sub": (raw.get("desc") or "").strip(),
         "att": raw.get("attchmntFile") or None,
         "hl": normalise_text(raw.get("attchmntText")),      # full, as NSE sends it
@@ -388,6 +389,13 @@ def wants_pdf(row):
     return sub in NSE_AMOUNT_DESCS, sub in NSE_PLEDGE_DESCS
 
 
+def wants_events(row):
+    """Notable/Critical rows whose own text names no decisive event: the PDF
+    may (events.py reads its first pages)."""
+    return (row["sev"] >= 2 and bool(row.get("att")) and not events.is_pledge_pdf(row)
+            and events.needs_pdf(row))
+
+
 def cache_key(row):
     att = row["att"]
     if row["src"] == "NSE":
@@ -445,21 +453,26 @@ def _with_limit(seconds, fn, *a):
         signal.signal(signal.SIGALRM, old)
 
 
-def read_pdf(path, want_amount, want_pledge):
-    """Same order and thresholds as collector.py's enrich_event."""
+def read_pdf(path, want_amount, want_pledge, row=None):
+    """Same order and thresholds as collector.py's enrich_event. For a
+    Notable/Critical row the events found on the first pages are kept too."""
     text = pdf_to_text(path)
     if len(text) < 50:                      # scanned, ~4% of filings
         return {"s": "scanned"}
+    ev = events.scan_pdf(row, text) if row is not None and row["sev"] >= 2 else None
+    out = {"s": "no_match"}
     if want_pledge:
         pl = extract_pledge(path)
         if pl:
-            return {"s": "pledge", "pl": {"event": pl["event"], "dir": pl["dir"],
-                                          "label": pl["label"]}}
-    if want_amount:
+            out = {"s": "pledge", "pl": {"event": pl["event"], "dir": pl["dir"],
+                                         "label": pl["label"]}}
+    if out["s"] == "no_match" and want_amount:
         amt = extract_amount(text)
         if amt:
-            return {"s": "amount", "amt": amt["crore"]}
-    return {"s": "no_match"}
+            out = {"s": "amount", "amt": amt["crore"]}
+    if ev is not None:
+        out["ev"] = ev
+    return out
 
 
 def apply_enrichment(row, entry):
@@ -498,12 +511,18 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
     try:
         for row in shown:
             want_amount, want_pledge = wants_pdf(row)
-            if not (want_amount or want_pledge):
+            want_ev = wants_events(row)
+            if not (want_amount or want_pledge or want_ev):
                 continue
             stats["eligible"] += 1
             key = cache_key(row)
             entry = cache.get(key)
-            if entry and (entry["s"] != "fetch_failed" or entry.get("n", 0) >= PDF_MAX_ATTEMPTS):
+            done = entry and (entry["s"] != "fetch_failed" or entry.get("n", 0) >= PDF_MAX_ATTEMPTS)
+            # an entry read before events.py existed has no "ev"; read it again
+            # once, unless the PDF can never give text
+            if done and want_ev and "ev" not in entry and entry["s"] in ("amount", "pledge", "no_match"):
+                done = False
+            if done:
                 stats["cache_hits"] += 1
                 apply_enrichment(row, entry)
                 continue
@@ -527,7 +546,7 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
                 stats["download_failed"] += 1
                 continue
             try:
-                result = _with_limit(PDF_PARSE_LIMIT, read_pdf, path, want_amount, want_pledge)
+                result = _with_limit(PDF_PARSE_LIMIT, read_pdf, path, want_amount, want_pledge, row)
             except _Overtime:
                 # counted as a failed attempt: tried again in a later run, up to
                 # PDF_MAX_ATTEMPTS, never allowed to hold this run up
@@ -572,7 +591,7 @@ def _write(path, obj):
 #                    what later runs need (matching key, ISIN, subcategory,
 #                    attachment, first-seen time, which run found it)
 #   days/<day>.json  what the screen reads: shown filings only, v5's fields
-BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "dir", "lab",
+BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "dir", "dc", "lab",
                "line", "amt", "sub", "att", "fs", "by", "hl", "subj", "cat", "why")
 SCREEN_FIELDS = ("id", "t", "ts", "co", "sec", "sev", "dir", "lab", "line")
 
@@ -713,6 +732,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     shown = [r for r in rows if not r.get("dup_of") and r["ts"][:10] in touched]
     pdf = enrich(shown, cache, bse_sess, nse_sess or bse_sess, max_pdfs, enrich_on, log)
     reapply_cached(rows, touched, cache)
+    colour(rows, touched, cache)
 
     # 6. write
     written = {}
@@ -781,10 +801,37 @@ def _utc(ist):
 def _pair_inplace(rows):
     """Run merge.pair_rows on the record-book rows and copy the result back."""
     view = [{"uid": r["id"], "source": r["src"], "company_key": r.get("ck"),
-             "filed_at": r["ts"], "sev": r["sev"], "isin": r.get("isin")} for r in rows]
+             "filed_at": r["ts"], "sev": r["sev"], "isin": r.get("isin"),
+             "lab": r.get("lab"), "ev": events.text_events(r)} for r in rows]
     pair_rows(view)
     for r, v in zip(rows, view):
         r["dup_of"] = v["dup_of"]
+
+
+def _why(out):
+    return {k: out[k] for k in ("rule", "event", "text", "reason", "by") if out.get(k)}
+
+
+def colour(rows, days, cache):
+    """
+    Decide each row's colour from its own words (events.py). Rows of `days`
+    only; other rows keep what they have. The category direction stays in
+    "dc" so this can be re-run any number of times with the same result.
+    """
+    index = {r["id"]: r for r in rows}
+    mine = [r for r in rows if r["ts"][:10] in days]
+    for r in mine:
+        if "dc" not in r:                     # filed before events.py existed
+            r["dc"] = "neutral" if events.is_pledge_pdf(r) else r["dir"]
+        entry = cache.get(cache_key(r)) if r.get("att") else None
+        out = events.decide(r, pdf_info=(entry or {}).get("ev"))
+        r["dir"], r["why"] = out["dir"], _why(out)
+    # the two halves of a merged pair must not point opposite ways
+    for r in mine:
+        k = index.get(r.get("dup_of"))
+        if k is not None and events.pair_conflict(k, r):
+            for x in (k, r):
+                x["dir"], x["why"] = "neutral", _why(events.PAIR_CONFLICT)
 
 
 # ================================================================ backfill
@@ -869,6 +916,7 @@ def repair(data_dir, first, last, log=print):
         enrich([r for r in mine if not r.get("dup_of")], cache, None, None, 0, False,
                log=lambda *_: None)
         reapply_cached(mine, {d}, cache)
+        colour(rows, {d}, cache)
         save_day(data_dir, d, mine)
         after = sum(1 for r in mine if r.get("dup_of"))
         totals["before"] += before
