@@ -15,7 +15,10 @@ export default function Masthead({ day, today, days, setDay, isToday, status, co
   const i = known.indexOf(day)
   const prev = i > 0 ? known[i - 1] : null
   const next = i >= 0 && i < known.length - 1 ? known[i + 1] : null
-  const fresh = status?.updated_utc ? agoText(minutesSince(status.updated_utc)) : null
+  // last time the exchanges were successfully checked (not merely attempted,
+  // and not "last time something new arrived")
+  const checkedAt = status?.checked_utc || status?.updated_utc
+  const fresh = checkedAt ? agoText(minutesSince(checkedAt)) : null
 
   const openPicker = () => {
     const el = picker.current

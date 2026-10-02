@@ -16,8 +16,9 @@ function lastGood(iso) {
 /** A small, calm notice - only when the data is late or an exchange failed. */
 export default function Notice({ status, error }) {
   const lines = []
-  if (status?.updated_utc) {
-    const mins = minutesSince(status.updated_utc)
+  const checkedAt = status?.checked_utc || status?.updated_utc
+  if (checkedAt) {
+    const mins = minutesSince(checkedAt)
     const { weekday, minutes } = nowIST()
     if (WEEKDAYS.has(weekday) && minutes >= 9 * 60 && minutes < 18 * 60 && mins > STALE_MIN) {
       lines.push(`Updates are running late — the last one was ${agoText(mins)}. New filings will appear when it catches up.`)

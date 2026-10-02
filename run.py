@@ -635,9 +635,23 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
                 "rows_today": len(today_rows),
                 "last_ok_ist": now_s if e["ok"] else prev.get(name, {}).get("last_ok_ist"),
             }
+        # "checked" is what the screen's "Updated N min ago" shows: the last
+        # time at least one exchange was actually read. A quiet run with
+        # nothing new still counts; a run where both exchanges failed does not.
+        if ex["BSE"]["ok"] or ex["NSE"]["ok"]:
+            checked = now_s
+        else:
+            checked = status.get("checked_ist") or max(
+                [e.get("last_ok_ist") for e in prev.values() if e.get("last_ok_ist")] or [None],
+                key=lambda x: x or "")
+        last_new = now_s if new_ids else status.get("last_new_ist")
         _write(os.path.join(data_dir, "status.json"), {
-            "updated_ist": now_s,
-            "updated_utc": now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "updated_ist": now_s,                      # last attempt, success or not
+            "updated_utc": _utc(now_s),
+            "checked_ist": checked,                    # last successful check
+            "checked_utc": _utc(checked),
+            "last_new_ist": last_new,                  # last time a new filing arrived
+            "last_new_utc": _utc(last_new),
             "run": kind,
             "days": days,
             "last_full_run_ist": now_s if kind == "full" else status.get("last_full_run_ist"),
@@ -648,6 +662,14 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
         })
     log("  done: %d new, %d requests, %.1fs" % (len(new_ids), sum(used.values()), runtime))
     return metrics, ex
+
+
+def _utc(ist):
+    """'YYYY-MM-DD HH:MM:SS' in IST -> 'YYYY-MM-DDTHH:MM:SSZ', or None."""
+    if not ist:
+        return None
+    return (datetime.strptime(ist, TS).replace(tzinfo=IST)
+            .astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 def _pair_inplace(rows):
