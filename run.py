@@ -33,8 +33,10 @@ import json
 import logging
 import os
 import shutil
+import signal
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -66,6 +68,11 @@ BSE_PAGE_DELAY = 0.6          # seconds between BSE pages; the rule is >= 0.5
 PDF_DELAY = 0.6               # seconds between PDF downloads
 MAX_PDFS_PER_RUN = 40         # keeps a run short; the rest wait for the next run
 PDF_MAX_ATTEMPTS = 3          # a PDF that will not download is retried, then left
+HTTP_TIMEOUT = (10, 30)       # connect, read: the default for any request without one
+PDF_DOWNLOAD_LIMIT = 30       # seconds for one whole PDF download, however slow the server
+PDF_MAX_BYTES = 15_000_000    # bigger files are skipped, not read
+PDF_PARSE_LIMIT = 20          # seconds to read text from one PDF
+PDF_STAGE_LIMIT = 120         # seconds of PDF work per run; the rest wait for the next run
 FULL_AT_NIGHT = (23, 40)      # the "about 23:45" full run fires from 23:40
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -116,6 +123,9 @@ class Counter:
         def counted(session, method, url, *a, **kw):
             host = url.split("/")[2] if "://" in url else url
             counter.by_host[host] = counter.by_host.get(host, 0) + 1
+            # no request ever goes out without a timeout, whatever library sent it
+            if kw.get("timeout") is None:
+                kw["timeout"] = HTTP_TIMEOUT
             return orig(session, method, url, *a, **kw)
 
         requests.sessions.Session.request = counted
@@ -386,21 +396,53 @@ def cache_key(row):
 
 
 def download_pdf(row, bse_sess, nse_sess, tmpdir):
+    """The PDF on disk, or None. Never takes longer than PDF_DOWNLOAD_LIMIT per
+    address tried: a server that trickles bytes is cut off, not waited for."""
     urls = ([u.format(row["att"]) for u in BSE_ATTACH_URLS] if row["src"] == "BSE"
             else [row["att"]])
     sess = bse_sess if row["src"] == "BSE" else nse_sess
     for url in urls:
         try:
             kw = {"headers": {"Referer": NSE_REF}} if row["src"] == "NSE" else {}
-            r = sess.get(url, timeout=40, **kw)
-            if r.status_code == 200 and r.content[:4] == b"%PDF":
+            start = time.time()
+            with sess.get(url, timeout=(10, 20), stream=True, **kw) as r:
+                if r.status_code != 200:
+                    continue
+                buf = bytearray()
+                for chunk in r.iter_content(65536):
+                    buf += chunk
+                    if time.time() - start > PDF_DOWNLOAD_LIMIT or len(buf) > PDF_MAX_BYTES:
+                        buf = None
+                        break
+            if buf and buf[:4] == b"%PDF":
                 path = os.path.join(tmpdir, "doc.pdf")
                 with open(path, "wb") as f:
-                    f.write(r.content)
+                    f.write(buf)
                 return path
         except requests.RequestException:
             continue
     return None
+
+
+class _Overtime(Exception):
+    pass
+
+
+def _with_limit(seconds, fn, *a):
+    """Run fn, giving up after `seconds` (Linux/macOS main thread; elsewhere
+    it simply runs)."""
+    if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
+        return fn(*a)
+
+    def _stop(*_):
+        raise _Overtime()
+    old = signal.signal(signal.SIGALRM, _stop)
+    signal.alarm(seconds)
+    try:
+        return fn(*a)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 
 def read_pdf(path, want_amount, want_pledge):
@@ -452,6 +494,7 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
     stats = {"eligible": 0, "cache_hits": 0, "downloads": 0, "download_failed": 0,
              "deferred": 0}
     tmpdir = tempfile.mkdtemp(prefix="pdf_")
+    stage_start = time.time()
     try:
         for row in shown:
             want_amount, want_pledge = wants_pdf(row)
@@ -471,7 +514,8 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
                 cache[key] = {"s": "not_pdf", "d": row["ts"][:10]}
                 stats["cache_hits"] += 1
                 continue
-            if not enabled or stats["downloads"] + stats["download_failed"] >= budget:
+            if (not enabled or stats["downloads"] + stats["download_failed"] >= budget
+                    or time.time() - stage_start > PDF_STAGE_LIMIT):
                 stats["deferred"] += 1
                 continue
             if stats["downloads"] + stats["download_failed"]:
@@ -483,7 +527,12 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
                 stats["download_failed"] += 1
                 continue
             try:
-                result = read_pdf(path, want_amount, want_pledge)
+                result = _with_limit(PDF_PARSE_LIMIT, read_pdf, path, want_amount, want_pledge)
+            except _Overtime:
+                # counted as a failed attempt: tried again in a later run, up to
+                # PDF_MAX_ATTEMPTS, never allowed to hold this run up
+                result = {"s": "fetch_failed", "n": (entry or {}).get("n", 0) + 1,
+                          "err": "took too long to read"}
             except Exception as e:
                 result = {"s": "unreadable", "err": type(e).__name__}
             finally:

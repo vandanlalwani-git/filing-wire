@@ -45,20 +45,57 @@ on:
   schedule:
     - cron: "*/5 * * * *"     # every 5 minutes; GitHub often runs these late
 
-# Never two runs at once: they would fight over the data branch.
-concurrency:
-  group: collector
-  cancel-in-progress: false
-
 permissions:
   contents: write       # push the data branch
   pages: write          # publish the website
   id-token: write       # required by the Pages deploy action
+  actions: write        # the watchdog cancels a run that never got a machine
 
 jobs:
+  # On 5 Oct 2026 a run's job waited 2 hours for a GitHub machine that never
+  # came, and every run queued behind it was replaced, so the feed stopped.
+  # A job timeout cannot catch that (it only starts counting on a machine),
+  # so every run first checks: if the run holding the queue has had no
+  # machine for 15 minutes and no other run is working, cancel it.
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel a run stuck without a machine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          now=$(date +%s)
+          jobs=$(for id in $(for st in in_progress queued; do gh api "repos/$GITHUB_REPOSITORY/actions/workflows/collector.yml/runs?status=$st&per_page=30" --jq '.workflow_runs[].id'; done); do
+                   [ "$id" = "$GITHUB_RUN_ID" ] && continue
+                   gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" \
+                     --jq ".jobs[] | select(.name==\"collect\" and .status!=\"completed\") | [\"$id\", .status, (.runner_name // \"\"), .created_at] | @tsv"
+                 done)
+          echo "${jobs:-no other collect job in progress}"
+          # a collect job that has a machine is real work (e.g. a long backfill): leave everything alone
+          if echo "$jobs" | awk -F'\t' '$3 != ""' | grep -q .; then exit 0; fi
+          echo "$jobs" | awk -F'\t' '$2=="queued" || $2=="in_progress"' | sort -t$'\t' -k4 | head -1 | \
+          while IFS=$'\t' read -r id status runner created; do
+            age=$(( now - $(date -d "$created" +%s) ))
+            if [ "$age" -gt 900 ]; then
+              echo "::warning::Cancelling run $id: its job has waited ${age}s without a machine and is blocking the queue"
+              gh run cancel "$id" -R "$GITHUB_REPOSITORY" || true
+            fi
+          done
+
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Never two collect jobs at once: they would fight over the data branch.
+    concurrency:
+      group: collector
+      cancel-in-progress: false
+    # A normal run takes about 1 minute, a busy full run about 2, and the
+    # worst case (full day of BSE pages + 2 minutes of PDFs) about 5.
+    # 10 minutes is well above that, and short enough that a hung run frees
+    # the queue within two timer ticks. Backfill/re-read/repair runs read
+    # many days and get 45.
+    timeout-minutes: ${{ (inputs.backfill_from || inputs.refetch_from || inputs.repair_from) && 45 || 10 }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -77,7 +114,7 @@ jobs:
         run: |
           mkdir -p data
           if git ls-remote --exit-code --heads origin data > /dev/null 2>&1; then
-            git fetch --depth=1 origin data
+            timeout 120 git fetch --depth=1 origin data
             git archive FETCH_HEAD | tar -x -C data
             echo "loaded $(find data -type f | wc -l) files"
           else
@@ -86,7 +123,7 @@ jobs:
 
       - name: Collect
         id: collect
-        timeout-minutes: 50
+        timeout-minutes: ${{ (inputs.backfill_from || inputs.refetch_from || inputs.repair_from) && 40 || 7 }}
         env:
           MODE: ${{ inputs.mode || 'auto' }}
           WITH_YESTERDAY: ${{ inputs.with_yesterday && 'yes' || '' }}
@@ -130,7 +167,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Record book $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M IST')"
-          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data:data
+          # the branch only ever moves to a complete new commit: a push that is
+          # cut off leaves the previous record book in place
+          timeout 120 git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data:data
           echo "data branch: $(git rev-list --count HEAD) commit"
 
       # The screen only needs rebuilding when its own code changes; otherwise
