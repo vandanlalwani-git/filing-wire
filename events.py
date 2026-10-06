@@ -123,8 +123,22 @@ EVENTS = [
          rx=r"(debentures?|ncds?|ccds?|bonds?|commercial papers?).{0,200}suspended.{0,80}on account of (maturity|conversion|redemption)"),
     dict(id="ORDER-UPDATE", event="Update on an order already disclosed", dir=0, dominant=True, where="any",
          rx=r"(update|status) on (the )?order execution|order execution (update|status)|"
-            r"(further to|with reference to|in continuation of) our (earlier|previous) (intimation|disclosure|letter)[^.]{0,200}"
-            r"(loa|letter of (acceptance|award|intent))[^.]{0,200}(contract agreement|entered into|signed|executed)"),
+            r"amendment\s?(of|in|to)\s?(the |an |existing )?\s?(work\s?order|purchase\s?order|order|contract)|"
+            r"(further to|with reference to|in continuation (of|to)) (our|the) (earlier|previous) (intimation|disclosure|letter|communication).{0,300}"
+            r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)"),
+    dict(id="BID-L1", event="Lowest/highest bidder, not yet awarded", dir=0, dominant=True, where="any",
+         rx=r"(declared|emerged|stood|been) (as )?(the )?(l-?1|lowest bidder|h-?1|highest bidder)",
+         block=r"(letters? of (award|acceptance|intent)|\blo[ai]\b|work orders? (has been |was )?(received|issued)|purchase orders? (has been |was )?received|contract win|has (now )?received)",
+         window=600),
+    dict(id="EMPANEL", event="Empanelled as a vendor, no order yet", dir=0, dominant=True, where="any",
+         rx=r"\bempanel\w*"),
+    dict(id="FRAMEWORK", event="Framework agreement / potential business, no firm order", dir=0, dominant=True, where="text",
+         rx=r"(framework agreement|potential (export )?suppl|indicative (programme|program|value|ceiling)|memorandum of understanding|\bmou\b)"),
+    dict(id="ORDER-PLACED", event="Company is placing an order with a supplier (it is the buyer)", dir=0, dominant=True, where="any",
+         rx=r"(placement of (the |a )?(purchase |work )?orders?,? on|has placed (the )?(following |an? )?(purchase |work )?orders?|approv\w* (for )?(the )?placement of)"),
+    dict(id="ORDER-CANCEL", event="Order or letter of award cancelled", dir=0, dominant=True, where="any",
+         rx=r"(cancell?ation of (the |a )?(letter of (award|acceptance|intent)|loa|loi|order|contract|work order|purchase order)|"
+            r"(letter of (award|acceptance|intent)|\bloa\b|order|contract) .{0,120}(has been|was|stands) (cancell?ed|terminated|withdrawn))"),
     dict(id="BANK-STRIKE", event="Industry-wide bank strike notice", dir=0, dominant=True, where="any",
          rx=r"united forum of bank unions|\bufbu\b|aibea|aiboc|all india (bank )?strike|bank strike"),
 
@@ -157,15 +171,20 @@ EVENTS = [
                r"demand|show.?cause|compounding|settlement|adjudicat|commissioner|customs|excise|income.?tax|"
                r"gst (department|dept|authorit|officer|order)|goods and services tax act|registrar of companies|rera|"
                r"pollution control|regulatory|statutory authority|trai|telecom regulatory|financial disincentive|"
-               r"clarification|corrigendum|correction|competition commission|approval of the scheme|scheme of|status of (the )?(order )?execution|"
-               r"amendment\s?of|(earlier|previous) (intimation|disclosure).{0,160}(loa|letter of (acceptance|award|intent)))"),
+               r"clarification|corrigendum|correction|competition commission|approval of the scheme|scheme of|"
+               r"regional director|section 441|\brd order|environment(al)? compensation|"
+               r"\bawarding (of )?(the )?contracts? .{0,100}\bto\b|(placed|placing) (an |the )?(purchase |work )?orders? (on|with)|status of (the )?(order )?execution|"
+               r"amendment\s?(of|in|to)|\bamended\b|placement of (the |a )?(purchase |work )?orders? on|has placed (the )?(following |an? )?(purchase |work )?orders?|"
+               r"cancell?ation of (the |a )?(letter|order|contract|loa|loi|work order|purchase order)|(letter of award|loa|order|contract) .{0,120}(has been|was|stands) (cancell?ed|terminated|withdrawn)|"
+               r"non.?binding (letter of intent|loi|term sheet|memorandum)|proposed acquisition|(earlier|previous) (intimation|disclosure).{0,160}(loa|letter of (acceptance|award|intent)))"),
     dict(id="COMMISSION", event="Plant commissioned / production started", dir=+1, where="any",
          rx=r"(successfully commissioned|has (been )?(fully |successfully )?commissioned|commissioning of (a |the )?[\d\.]+ ?(mw|mwp|kw|tpa|tpm|mtpa)|"
             r"commence\w* (of )?(its |the )?commercial (production|operations?)|commercial operation date|"
             r"(capacity expansion|expansion (project|programme|program)|phase).{0,60}(completed|commissioned)|"
             r"inaugurat\w* .{0,60}(facility|plant|unit)|capacity (has been )?(enhanced|added) to|"
             r"operations .{0,120}restored to (their )?regular)",
-         block=r"(for (its |our )?(reputed )?clients|executed for|on behalf of|proposed|expected to be|will be commissioned|scheduled)"),
+         block=r"(for (its |our )?(reputed )?clients|executed for|on behalf of|proposed|expected to be|will be commissioned|scheduled|"
+               r"postpon\w*|delay\w*|deferr?\w*|pilot plant|(retail|multi.?brand|new) (store|showroom)s?)"),
     dict(id="DRUG-OK", event="Drug regulator: clean inspection / approval", dir=+1, where="any",
          rx=r"((zero|nil|no) (form )?(483 )?observations?|without any (form )?483|"
             r"establishment inspection report|\beir\b|voluntary action indicated|\bvai\b|no action indicated|\bnai\b|"
@@ -304,7 +323,7 @@ _TAX_LOST = re.compile(r"(confirm|upheld|dismiss|disallow|reject|levy|levied|imp
 
 
 _REGULATOR_DOC = re.compile(
-    r"(order.in.original|show.?cause|penalty (of|order|imposed|levied|amounting)|assessment order|demand notice|"
+    r"(regional director|section 441|compounding|pollution control board|environment(al)? compensation|order.in.original|show.?cause|penalty (of|order|imposed|levied|amounting)|assessment order|demand notice|"
     r"income.?tax act|cgst act|gst act|customs act|central excise|sebi .{0,30}order|order passed by|appellate)")
 
 
@@ -351,6 +370,11 @@ def _prep(text, row):
     t = clean(text)
     co = norm(row.get("co"))
     return t.replace(co, " ") if co else t
+
+
+ORDER_VETO = {"REG-ORDER", "TAX-DEMAND", "COMPOUNDING", "SEBI-ACTION", "BID-L1", "EMPANEL",
+              "ORDER-UPDATE", "COURT-STEP", "NCLT-SCHEME",
+              "ORDER-PLACED", "ORDER-CANCEL"}
 
 
 def text_hits(row, blocked=None):
@@ -417,6 +441,11 @@ def decide(row, pdf_text=None, pdf_info=None):
 
     blocked = set()
     raw = text_hits(row, blocked)
+    # a headline "order" the PDF shows to be a regulator's order, a bid status,
+    # an empanelment or a follow-up to an order already disclosed is not a win
+    pdf_rules = {h["rule"] for h in (pdf_info or {}).get("hits") or []}
+    if pdf_rules & ORDER_VETO:
+        raw = [h for h in raw if h["rule"] != "ORDER-WIN"]
     # a headline event whose outcome the PDF qualifies is dropped
     hits = [h for h in raw if not (_BY_ID[h["rule"]].get("pdf_block") and h["rule"] in blocks)]
     # an event the headline reverses ("set aside", "no impact") is not
