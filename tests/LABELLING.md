@@ -59,13 +59,24 @@ looked at while rules are written.
 | A company name or product name that happens to contain an event word ("Nitin Fire Protection", a "Shutdown" software product) | Unclassified |
 | Routine filings (AGM, trading window, newspaper ads, investor meets, results without figures, clarifications) | Unclassified |
 
-## Judgement calls (the owner decides; scored separately)
+| Order won by an associate company or a related party (not the company, not a subsidiary) | Unclassified: not the company's own win |
+| Company placing an order with its own supplier (it is the buyer) | Unclassified |
+| Earlier letter of award or order cancelled | Adverse |
+| Commissioning delayed or postponed | Adverse |
+| Default: only an actual missed or delayed payment ("has defaulted on", "interest due on <date> not paid") | Adverse; the quarterly default-disclosure form, nil or not, is Unclassified |
+| Credit rating downgraded, or placed on watch negative, or outlook cut to negative | Adverse; "factors that could lead to a downgrade" is boilerplate |
 
-Dividend declared, buyback, bonus/split, fund raising (QIP, preferential,
-rights), acquisition, CEO/CFO/MD resignation, independent director
-resignation, credit rating reaffirmed. These are labelled with a
-recommendation and flagged `judgement_call: true`; they are excluded from
-the accuracy target until a decision is made.
+## Judgement calls (the owner decided, Oct 2026)
+
+Grey (Unclassified): dividend, bonus/split, fund raising (QIP, preferential,
+rights), acquisition, CEO/CFO/MD resignation, credit rating reaffirmed.
+
+| Filing | Label |
+|---|---|
+| New buyback approved by the board | Favourable |
+| Buyback daily report, public announcement, letter of offer, record date, completion, shareholder approval of an already-approved buyback | Unclassified |
+| Independent director resigns and the letter cites governance concerns, disagreement with the board or management, lack of information or similar | Adverse |
+| Independent director resigns for any other reason, or the letter says there are no other material reasons | Unclassified |
 
 ## Splits
 

@@ -139,6 +139,8 @@ EVENTS = [
     dict(id="ORDER-CANCEL", event="Order or letter of award cancelled", dir=0, dominant=True, where="any",
          rx=r"(cancell?ation of (the |a )?(letter of (award|acceptance|intent)|loa|loi|order|contract|work order|purchase order)|"
             r"(letter of (award|acceptance|intent)|\bloa\b|order|contract) .{0,120}(has been|was|stands) (cancell?ed|terminated|withdrawn))"),
+    dict(id="ORDER-ASSOC", event="Order won by an associate company, not the company or a subsidiary", dir=0, where="any",
+         rx=r"\b(our |its |the company'?s? |an )?associate (company|companies|entity|concern)\b"),
     dict(id="BANK-STRIKE", event="Industry-wide bank strike notice", dir=0, dominant=True, where="any",
          rx=r"united forum of bank unions|\bufbu\b|aibea|aiboc|all india (bank )?strike|bank strike"),
 
@@ -160,7 +162,9 @@ EVENTS = [
             r"(dismiss\w*|withdraw\w*|rejected).{0,120}(insolvency|section [79]\b|c\.?p\.? ?\(ib\)))"),
     dict(id="RATING-UP", event="Credit rating upgraded", dir=+1, where="any",
          rx=r"(ratings?|outlook)\b.{0,80}\bupgrad\w+|\bupgrad\w+ .{0,80}\b(ratings?|outlook)\b|outlook (has been )?(revised|changed|improved) (from \W?\w+\W? )?to \W?positive|"
-            r"outlook (has been )?(revised|changed|improved) from \W?negative\W? to \W?stable|(revis\w+|chang\w+|improv\w+) (the )?outlook .{0,25}from \W?negative\W? to \W?(stable|positive)|\w+/positive.{0,40}outlook revised from \W?stable"),
+            r"outlook (has been )?(revised|changed|improved) from \W?negative\W? to \W?stable|(revis\w+|chang\w+|improv\w+) (the )?outlook .{0,25}from \W?negative\W? to \W?(stable|positive)|\w+/positive.{0,40}outlook revised from \W?stable",
+         # a form whose column lists the options "new/ upgrade/ downgrade/ reaffirm"
+         block=r"(new|positive|negative|stable|assigned|reaffirm\w*|downgrade|withdraw\w*)\s?/\s?(upgrad|downgrad)|upgrad\w*\s?/\s?(downgrad|rating|reaffirm|withdraw|other)", window=40),
     dict(id="ORDER-WIN", event="Order or contract win", dir=+1, where="any",
          rx=r"(\border win\b|contract win|(receiv\w*|secur\w*|bag\w*|won|win|award\w*|receipt of|bagging) .{0,80}"
             r"\b(orders?|contracts?|letters? of (award|intent|acceptance)|loa|loi|work orders?|purchase orders?|mandate)\b|"
@@ -190,6 +194,29 @@ EVENTS = [
             r"establishment inspection report|\beir\b|voluntary action indicated|\bvai\b|no action indicated|\bnai\b|"
             r"(not related to|non-?)\s?gmp|no gmp observation|"
             r"(usfda|us fda|fda).{0,60}(final|tentative) approval|(final|tentative) approval.{0,60}(usfda|us fda|fda))"),
+    dict(id="BUYBACK-NEW", event="New buyback approved by the board", dir=+1, where="any",
+         rx=r"(board[^.;]{0,160}\b(approv\w*|consider\w* and approv\w*)[^.;]{0,120}\bbuy.?back|"
+            r"approv\w* (of |for )?(the )?(proposal (for|of|to) )?(the )?buy.?back of[^.;]{0,60}(equity )?shares|"
+            r"buy.?back of[^.;]{0,120}(has been|was|is) approved by the board)",
+         block=r"(daily report|post.?buy.?back|public announcement|letter of offer|record date|extinguish\w*|"
+               r"completion of (the )?buy.?back|closure of (the )?buy.?back|tendering period|bought back|"
+               r"intimation (of|for|regarding) (the )?(board )?meeting|(will|to) consider|proposal to consider|"
+               r"pursuant to the (approval|resolution)|in (terms|accordance|pursuance) (of|with) the|approved by the board (of directors )?(of the company )?(at its meeting )?(held )?on \d|"
+               r"escrow|offer (opens|closes|period)|corrigendum|newspaper|shareholders?'? approv\w*|postal ballot|special resolution|"
+               r"rejected|not approv\w*|did not approve|withdraw\w*|deferred)", window=200),
+    dict(id="ID-RESIGN-GOV", event="Independent director resigned citing governance concerns", dir=-1, where="any",
+         rx=r"(governance (concerns?|issues?|lapses?|failures?|deficienc\w*)|"
+            r"(disagree\w*|differences? of opinion|difference in opinion) (with|between)[^.;]{0,40}(board|management|promoters?|other directors|chairman|chairperson|managing director)|"
+            r"lack of (transparency|information|co-?operation|access|independence|oversight)|"
+            r"(not|never) (been )?(provided|furnished|given|shared)[^.;]{0,60}(information|documents|records|details)|"
+            r"(serious |grave )?concerns? (over|about|regarding|on|with)[^.;]{0,60}(management|board|functioning|conduct|governance|transactions?|accounts|financial statements|related part\w*)|"
+            r"(unable|not able|cannot) to (effectively )?discharge[^.;]{0,40}(duties|responsibilit\w*|role)|in protest|"
+            r"irregularit\w*|non-?cooperation|(was|were|been) (kept|left) in the dark)",
+         need=r"independent director[\s\S]{0,4000}(resign|cessation|step(ped)? down)|(resign|cessation|step(ped)? down)[\s\S]{0,4000}independent director",
+         need_window=6000,
+         block=r"(\bno (other )?(material )?(reasons?|disagreement|differences?|concerns?)|not (due to|on account of|because of) any|"
+               r"without any (disagreement|difference)|there (is|was|are|were) no|nor any|none of|does not (have|involve)|"
+               r"other than (those|the one|the reasons?) (mentioned|stated|given)|personal (reasons|commitments)|pre-?occupation)", window=200),
     dict(id="PLEDGE-REL", event="Pledge released", dir=+1, where="any",
          rx=r"(release|revocation) of (the )?(pledge|encumbrance|pledged)|pledge (released|revoked)"),
 
@@ -222,9 +249,16 @@ EVENTS = [
          block=r"(concluded|completed).{0,300}(no (material )?(impact|liability)|input tax credit|eligible to avail)|"
                r"(no (material )?(impact|liability)|input tax credit|eligible to avail).{0,300}(concluded|completed)", pdf_block=True, window=400),
     dict(id="DEFAULT", event="Default on interest / principal", dir=-1, where="any",
-         rx=r"(default(ed)? (in|on) (the )?(re)?payment|defaults? on (re)?payment|default on (the )?(bank )?(loan|account)|bank default|delay in (payment|servicing) of (interest|principal)|"
-            r"non.?payment of (interest|principal)|wilful defaulter)",
-         block=r"(\bnil\b|no default|not (in )?default|neither the company nor|is not a wilful)"),
+         # an actual event only: "has defaulted on", "delay in payment of
+         # interest due on <date>". The quarterly default-disclosure form and
+         # the standard clauses in loan paperwork never count.
+         rx=r"((has|have|had) (defaulted|committed (a )?default) (in|on)|"
+            r"delay(ed)? in (the )?(payment|servicing|repayment) of (the )?(interest|principal|instal\w*|coupon|redemption)[^.;]{0,120}\bdue on\b|"
+            r"(interest|principal|instal\w*|coupon|redemption amount)[^.;]{0,80}\bdue on\b[^.;]{0,80}(has|have) not been (paid|serviced)|"
+            r"(unable|could not|failed) to (pay|service|repay|make (the )?payment of)[^.;]{0,60}(interest|principal|instal\w*|coupon|dues))",
+         block=r"(\bnil\b|no default|not (in )?default|neither the company nor|is not a wilful|quarter(ly)?\b|as on (the )?(last day|date|quarter)|"
+               r"\bc-?1\b|\bc-?2\b|total amount of outstanding|event of default|events of default|in case of (any )?default|if the (company|borrower)|"
+               r"shall (be )?(deemed|constitute)|cured|regularis\w*|regulariz\w*|since (been )?paid|paid on)", window=240),
     dict(id="FIRE", event="Fire / accident at a facility", dir=-1, where="any",
          rx=r"(major fire|fire (broke out|incident|accident|occurred)|explosion|blast at|fatal\w*|rupture|"
             r"accident (at|in) (the )?(plant|factory|unit|facility|site))",
@@ -238,7 +272,13 @@ EVENTS = [
          block=r"(secretarial|internal|cost) auditor|conclusion of .{0,20}annual general meeting|legal and regulatory requirements|removal|death|"
                r"casual vacancy|appointment ?/ ?resignation|appoint\w* .{0,40}(as|of) (the )?statutory auditor"),
     dict(id="RATING-DOWN", event="Credit rating downgraded / watch negative", dir=-1, where="any",
-         rx=r"(downgrad\w+|watch with negative|rating watch negative|outlook (has been )?(revised|changed) (from \W?\w+\W? )?to \W?negative)"),
+         # an actual downgrade only: rating letters also carry "factors that
+         # could lead to a downgrade" in every press release
+         rx=r"((has been|have been|was|were|is|are|stands?) downgraded|downgraded (to|from)|downgrade of (the )?(long|short|rating)|"
+            r"(placed|put|kept|retained) (on|under) (credit |rating )?watch with negative|rating watch (with )?negative|"
+            r"outlook (has been |was )?(revised|changed) (from \W?\w+\W? )?to \W?negative)",
+         block=r"((could|may|would|might|will|can) (lead|trigger|result|warrant|prompt|also)|sensitivit\w*|factors|in case of|if the|"
+               r"downgrade (trigger|factor)|definition|rating scale)", window=120),
     dict(id="INSOLV-ADMIT", event="Insolvency petition admitted / CIRP started", dir=0, where="any",
          rx=r"(admit\w* .{0,120}(insolvency|section [79]\b|cirp)|(initiat\w*|commence\w*) (of )?(the )?(corporate insolvency resolution process|cirp)\b.{0,60}(against|of) the company|"
             r"order of moratorium|moratorium (has been )?(declared|imposed))",
@@ -306,6 +346,10 @@ JUDGEMENT = {
     "acquisition": 0, "CEO/CFO/MD resignation": 0,
     "independent director resignation": 0, "credit rating reaffirmed": 0,
 }
+# Decided by the user in Oct 2026: all of the above stay grey. Two narrower
+# events are coloured instead, each once it passes its own blind test:
+#   BUYBACK-NEW   a new buyback approved by the board (daily/progress reports grey)
+#   ID-RESIGN-GOV an independent director resigning over governance concerns
 
 _BY_ID = {e["id"]: e for e in EVENTS}
 for e in EVENTS:
@@ -345,7 +389,8 @@ def _hits(text, where, blocked=None):
                 if blocked is not None:
                     blocked.add(e["id"])
                 continue
-            if e["_need"] and not e["_need"].search(text[max(0, a - NEED_WINDOW): b + NEED_WINDOW]):
+            nw = e.get("need_window", NEED_WINDOW)
+            if e["_need"] and not e["_need"].search(text[max(0, a - nw): b + nw]):
                 continue
             out.append({"rule": e["id"], "event": e["event"], "dir": _dir(e),
                         "phrase": text[a:b][:120], "dominant": e.get("dominant", False),
@@ -374,7 +419,7 @@ def _prep(text, row):
 
 ORDER_VETO = {"REG-ORDER", "TAX-DEMAND", "COMPOUNDING", "SEBI-ACTION", "BID-L1", "EMPANEL",
               "ORDER-UPDATE", "COURT-STEP", "NCLT-SCHEME",
-              "ORDER-PLACED", "ORDER-CANCEL"}
+              "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC"}
 
 
 def text_hits(row, blocked=None):
@@ -444,13 +489,16 @@ def decide(row, pdf_text=None, pdf_info=None):
     # a headline "order" the PDF shows to be a regulator's order, a bid status,
     # an empanelment or a follow-up to an order already disclosed is not a win
     pdf_rules = {h["rule"] for h in (pdf_info or {}).get("hits") or []}
-    if pdf_rules & ORDER_VETO:
+    order_veto = bool(pdf_rules & ORDER_VETO or "ORDER-ASSOC" in {h["rule"] for h in raw})
+    if order_veto:
         raw = [h for h in raw if h["rule"] != "ORDER-WIN"]
     # a headline event whose outcome the PDF qualifies is dropped
     hits = [h for h in raw if not (_BY_ID[h["rule"]].get("pdf_block") and h["rule"] in blocks)]
     # an event the headline reverses ("set aside", "no impact") is not
     # brought back by the PDF's longer retelling of the same story
     vetoed = ({h["rule"] for h in raw} - {h["rule"] for h in hits}) | blocked
+    if order_veto:
+        vetoed.add("ORDER-WIN")
     by = "text"
     # read the PDF when the headline names no decisive event. A headline that
     # only names a tax notice ("update on show cause notice") is not decisive:
