@@ -571,7 +571,10 @@ LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
         "COMMISSION",
         # rare: no wrong colour on any filing available; every firing is logged
         # (rare_rules_log.json) and the rule is switched off if one is wrong
-        "BUYBACK-NEW", "ID-RESIGN-GOV"}
+        "BUYBACK-NEW", "ID-RESIGN-GOV",
+        # quarterly results from BSE's figures (results.py): all 128 cases with
+        # NSE data agreed; 50 of 50 hand-checked against the filing
+        "RESULTS"}
 RARE = {"BUYBACK-NEW", "ID-RESIGN-GOV"}
 
 # Labels the exchanges' categories gave that the filing's own text contradicts.

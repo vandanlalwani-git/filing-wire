@@ -20,6 +20,9 @@ export function whyText(side) {
   const word = DIR_WORD[side.dir] || 'Unclassified'
   const w = side.why
   if (!w) return `${word}: ${side.lab}.`
+  if (w.by === 'data' && side.dir !== 'neutral') {   // quarterly results: the numbers decide
+    return `${word}: ${w.event} — ${w.text}.`
+  }
   if (w.rule || w.reason) {           // new rules (Part C) say which phrase decided it
     const where = w.by === 'pdf' ? 'the PDF says' : 'the text says'
     return side.dir === 'neutral'

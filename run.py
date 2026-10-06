@@ -47,6 +47,7 @@ from classify import classify, normalise_text                     # noqa: E402
 from classify import RULES as BSE_RULES, OVERRIDES as BSE_OVERRIDES   # noqa: E402
 from merge import classify_nse, norm_name, pair_rows              # noqa: E402
 import events                                                      # noqa: E402
+import results                                                     # noqa: E402
 from merge import NSE_RULES, NSE_OVERRIDES                        # noqa: E402
 from enrich import (extract_amount, extract_pledge,               # noqa: E402
                     pdf_to_text, format_amount)
@@ -203,6 +204,7 @@ def row_from_bse(raw, sectors, scrip):
         "t": ts[11:16],
         "co": (raw.get("SLONGNAME") or "").replace(" Ltd", "").replace("-$", "").strip(),
         "ck": norm_name(raw.get("SLONGNAME")),
+        "sc": str(raw.get("SCRIP_CD") or "") or None,
         "isin": ref.get("isin"),
         "sec": sectors.get(ref.get("sym") or "", "Other"),
         "sev": c["sev"], "dir": c["dir"], "dc": c["dir"], "lab": c["label"], "line": c["line"],
@@ -593,7 +595,7 @@ def _write(path, obj):
 #                    what later runs need (matching key, ISIN, subcategory,
 #                    attachment, first-seen time, which run found it)
 #   days/<day>.json  what the screen reads: shown filings only, v5's fields
-BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "sev0", "dir", "dc", "lab",
+BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "sc", "isin", "sec", "sev", "sev0", "dir", "dc", "lab",
                "line", "amt", "sub", "att", "fs", "by", "hl", "subj", "cat", "why")
 SCREEN_FIELDS = ("id", "t", "ts", "co", "sec", "sev", "dir", "lab", "line")
 
@@ -744,7 +746,10 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     shown = [r for r in rows if not r.get("dup_of") and r["ts"][:10] in touched]
     pdf = enrich(shown, cache, bse_sess, nse_sess or bse_sess, max_pdfs, enrich_on, log)
     reapply_cached(rows, touched, cache)
-    colour(rows, touched, cache)
+    rcache = _read(os.path.join(data_dir, RESULTS_CACHE), {})
+    if enrich_on and "RESULTS" in events.LIVE:
+        results_stage(shown, rcache, bse_sess, now, log)
+    colour(rows, touched, cache, rcache)
 
     # 6. write
     written = {}
@@ -752,7 +757,12 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
         written[d] = save_day(data_dir, d, [r for r in rows if r["ts"][:10] == d])
     today = now.strftime("%Y-%m-%d")
     pruned = prune(data_dir, today, cache) if not backfill_days else 0
+    if not backfill_days:
+        cutoff = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%d")
+        for k in [k for k, v in rcache.items() if v.get("d", "9999") < cutoff]:
+            del rcache[k]
     _write(os.path.join(data_dir, "enrich_cache.json"), cache)
+    _write(os.path.join(data_dir, RESULTS_CACHE), rcache)
 
     runtime = round(time.time() - t0, 1)
     used = COUNTER.since(snap)
@@ -838,7 +848,7 @@ def _why(out):
     return {k: out[k] for k in ("rule", "event", "text", "reason", "by") if out.get(k)}
 
 
-def colour(rows, days, cache):
+def colour(rows, days, cache, rcache=None):
     """
     Decide each row's colour from its own words (events.py). Rows of `days`
     only; other rows keep what they have. The category direction stays in
@@ -856,6 +866,9 @@ def colour(rows, days, cache):
                                            and entry.get("n", 0) >= PDF_MAX_ATTEMPTS)):
             info = {"hits": [], "blocks": []}   # can never give text: nothing in it
         out = events.decide(r, pdf_info=info)
+        res = result_outcome(r, rcache)
+        if res is not None:
+            out = res
         r["dir"], r["why"] = out["dir"], _why(out)
         # a routine-looking filing the rules colour (an independent director
         # resigning over governance concerns) is shown as Notable; "sev0"
@@ -877,6 +890,66 @@ def colour(rows, days, cache):
         if k is not None and events.pair_conflict(k, r):
             for x in (k, r):
                 x["dir"], x["why"] = "neutral", _why(events.PAIR_CONFLICT)
+
+
+RESULTS_CACHE = "results_cache.json"
+RESULTS_PER_RUN = 40            # results filings looked up per run
+RESULTS_STAGE_LIMIT = 90        # seconds of results lookups per run
+RESULTS_RETRY_MIN = 20          # minutes between tries while BSE has no figures yet
+RESULTS_MAX_TRIES = 12
+
+
+def _rkey(r):
+    y, mo = results.quarter_end(r)
+    return "%s|%s" % (r.get("sc"), results.qcode(y, mo))
+
+
+def results_stage(shown, rcache, sess, now, log):
+    """Look up structured figures for new results filings (BSE's own data,
+    current quarter and the same quarter a year earlier). Figures that are
+    not out yet are tried again later, up to RESULTS_MAX_TRIES times."""
+    t0, done, found = time.time(), 0, 0
+    sess.headers.setdefault("Referer", "https://www.bseindia.com/")
+    for r in shown:
+        if not results.is_result(r) or r["sev"] < 2 or not r.get("sc"):
+            continue
+        k = _rkey(r)
+        e = rcache.get(k) or {}
+        if e.get("final"):
+            continue
+        last = e.get("t")
+        if last and (now - datetime.strptime(last, TS).replace(tzinfo=IST)).total_seconds() < RESULTS_RETRY_MIN * 60:
+            continue
+        if done >= RESULTS_PER_RUN or time.time() - t0 > RESULTS_STAGE_LIMIT:
+            break
+        done += 1
+        try:
+            basis, cur, ly = results.fetch(sess, r["sc"], k.split("|")[1])
+        except Exception as ex:                       # network trouble: try later
+            rcache[k] = dict(e, t=now.strftime(TS), n=e.get("n", 0) + 1, err=type(ex).__name__)
+            continue
+        n = e.get("n", 0) + 1
+        rcache[k] = {"b": basis, "c": cur, "l": ly, "t": now.strftime(TS), "n": n,
+                     "d": r["ts"][:10], "final": bool(cur) or n >= RESULTS_MAX_TRIES}
+        found += bool(cur)
+    if done:
+        log("  results: %d looked up, %d with figures" % (done, found))
+
+
+def result_outcome(r, rcache):
+    """The results rule's decision for a results filing, or None to leave
+    the row to the word rules."""
+    if not rcache or not results.is_result(r) or not r.get("sc"):
+        return None
+    e = rcache.get(_rkey(r))
+    if not e or not e.get("final"):
+        return None
+    j = results.judge(e.get("b"), e.get("c"), e.get("l"))
+    out = {"dir": j["dir"], "rule": "RESULTS", "event": results.EVENT, "text": j.get("text"),
+           "reason": j.get("reason"), "by": "data"}
+    if out["dir"] != "neutral" and "RESULTS" not in events.LIVE:
+        out = dict(out, dir="neutral", reason="%s: not coloured yet - this rule is still being tested" % results.EVENT)
+    return out
 
 
 RARE_LOG = "rare_rules_log.json"
@@ -985,6 +1058,7 @@ def repair(data_dir, first, last, log=print, fetch=True):
     RARE_DATA_DIR = data_dir
     snap = COUNTER.snapshot()
     cache = _read(os.path.join(data_dir, "enrich_cache.json"), {})
+    rcache = _read(os.path.join(data_dir, RESULTS_CACHE), {})
     sess = {}
     read = 0
     d0 = datetime.strptime(first, "%Y-%m-%d")
@@ -1020,7 +1094,7 @@ def repair(data_dir, first, last, log=print, fetch=True):
         enrich([r for r in mine if not r.get("dup_of")], cache, None, None, 0, False,
                log=lambda *_: None)
         reapply_cached(mine, {d}, cache)
-        colour(rows, {d}, cache)
+        colour(rows, {d}, cache, rcache)
         save_day(data_dir, d, mine)
         after = sum(1 for r in mine if r.get("dup_of"))
         totals["before"] += before
