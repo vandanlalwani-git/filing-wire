@@ -648,7 +648,15 @@ def plan(now, status, mode, with_yesterday=False):
                 or (now >= night and last_dt < night))
     else:
         full = mode == "full"
-    days = [yesterday, today] if (full and (now.hour == 0 or with_yesterday)) else [today]
+    # a day whose last BSE read was refused part-way is read in full next time
+    # (not more often than every 10 minutes, so a BSE that is refusing us is
+    # not asked for whole days every 5 minutes)
+    retry = [d for d in status.get("bse_retry_days", []) if d in (yesterday, today)]
+    last = status.get("last_full_run_ist")
+    rested = not last or now - datetime.strptime(last, TS).replace(tzinfo=IST) >= timedelta(minutes=10)
+    if retry and mode == "auto" and rested:
+        full = True
+    days = [yesterday, today] if (full and (now.hour == 0 or with_yesterday or yesterday in retry)) else [today]
     return ("full" if full else "quick"), days
 
 
@@ -771,6 +779,18 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
                 [e.get("last_ok_ist") for e in prev.values() if e.get("last_ok_ist")] or [None],
                 key=lambda x: x or "")
         last_new = now_s if new_ids else status.get("last_new_ist")
+        # BSE refusals: counted per IST day; a refused day is re-read in full
+        blocks = {k: v for k, v in status.get("bse_blocks", {}).items()
+                  if k >= (now - timedelta(days=14)).strftime("%Y-%m-%d")}
+        retry = set(status.get("bse_retry_days", []))
+        for d, info in bse_info.items():
+            if info["ok"]:
+                if full:
+                    retry.discard(d)
+            else:
+                blocks[today] = blocks.get(today, 0) + 1
+                retry.add(d)
+        retry = sorted(d for d in retry if d >= (now - timedelta(days=1)).strftime("%Y-%m-%d"))
         _write(os.path.join(data_dir, "status.json"), {
             "updated_ist": now_s,                      # last attempt, success or not
             "updated_utc": _utc(now_s),
@@ -782,6 +802,8 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
             "days": days,
             "last_full_run_ist": now_s if kind == "full" else status.get("last_full_run_ist"),
             "exchanges": exchanges,
+            "bse_blocks": blocks,          # refused/failed BSE reads per IST day
+            "bse_retry_days": retry,       # days to read in full on the next run
             "runtime_s": runtime,
             "requests": sum(used.values()),
             "new_rows": len(new_ids),
@@ -826,6 +848,11 @@ def colour(rows, days, cache):
         entry = cache.get(cache_key(r)) if r.get("att") else None
         out = events.decide(r, pdf_info=(entry or {}).get("ev"))
         r["dir"], r["why"] = out["dir"], _why(out)
+        lab = events.better_label(r, out.get("rules") or [])
+        if lab:
+            if r.get("line", "").startswith(r["lab"]):
+                r["line"] = lab + r["line"][len(r["lab"]):]
+            r["lab"] = lab
     # the two halves of a merged pair must not point opposite ways
     for r in mine:
         k = index.get(r.get("dup_of"))

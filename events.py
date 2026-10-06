@@ -234,6 +234,12 @@ EVENTS = [
          block=r"no (further|new) (pledge|encumbrance)|increase in .{0,40}(amount|facilit)"),
 
     # ------------------------------------------- recognised, not coloured
+    dict(id="REG-ORDER", event="Order from a tax or regulatory authority", dir=0, where="any",
+         rx=r"(order.in.(original|appeal)|\boio\b|appeal order|assessment order|penalty order|demand order|"
+            r"compounding order|refund (sanction )?order|"
+            r"(orders?|directions?) (dated [\w ,]{0,20})?(passed |issued |received )?(by|from) (the )?(hon'?ble )?([\w&,.()-]+ ){0,5}"
+            r"(gst|cgst|sgst|tax|customs|excise|commissioner|tribunal|nclt|nclat|court|sebi|securities and exchange board|"
+            r"registrar of companies|regional director|pollution control|rera|trai|fssai|enforcement directorate|income.?tax))"),
     dict(id="NCLT-SCHEME", event="NCLT step on a merger/scheme", dir=0, where="any",
          rx=r"((scheme|amalgamation|merger|demerger|arrangement).{0,160}(nclt|national company law tribunal|tribunal)|"
             r"(nclt|national company law tribunal|tribunal).{0,160}(scheme|amalgamation|merger|demerger|arrangement)|"
@@ -426,10 +432,59 @@ def decide(row, pdf_text=None, pdf_info=None):
         ph = [_expand(h) for h in pdf_info.get("hits") or [] if h["rule"] not in vetoed]
         if ph:
             hits, by = hits + ph, "pdf"
-    return _resolve(hits, row, by)
+    out = _resolve(hits, row, by)
+    out["rules"] = sorted({h["rule"] for h in hits})
+    return out
+
+
+# Rules allowed to colour a row. Every other rule still names the event and
+# still counts towards "conflicting signals", but leaves the row grey until it
+# passes its own blind test (at least 95% right on fresh filings).
+# Stage 1 (6 Oct 2026): only rules that were right every time in blind tests.
+LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
+        "PLEDGE-NEW", "PLEDGE-REL", "PLEDGE-PDF"}
+
+# Labels the exchanges' categories gave that the filing's own text contradicts.
+# The row keeps its category in "sub"/"cat"; only the tag shown changes.
+RELABEL = {
+    "TAX-DEMAND": "Tax / regulatory order", "REG-ORDER": "Tax / regulatory order",
+    "COMPOUNDING": "Compounding / settlement",
+    "SEBI-ACTION": "SEBI / exchange action", "RULING-FAV": "Ruling on a dispute",
+    "RULING-MIXED": "Ruling on a dispute", "COURT-STEP": "Court / tribunal step",
+    "NCLT-SCHEME": "NCLT step on a scheme",
+}
+_WRONG_LABEL = {
+    "Order win": {"TAX-DEMAND", "REG-ORDER", "COMPOUNDING", "SEBI-ACTION", "RULING-FAV", "RULING-MIXED", "COURT-STEP"},
+    "Order awarded": {"TAX-DEMAND", "REG-ORDER", "COMPOUNDING", "SEBI-ACTION", "RULING-FAV", "RULING-MIXED", "COURT-STEP"},
+    "Insolvency / tribunal matter": {"NCLT-SCHEME", "COURT-STEP"},
+    "Insolvency proceedings": {"NCLT-SCHEME"},
+}
+
+
+def better_label(row, rules):
+    """The tag to show instead of a category label the text contradicts, or None."""
+    bad = _WRONG_LABEL.get(row.get("lab"))
+    if not bad:
+        return None
+    for r in rules:
+        if r in bad:
+            return RELABEL[r]
+    return None
+
+
+def _gate(out):
+    """Stage switch: a rule not yet proven leaves the row grey, saying so."""
+    if out["dir"] != "neutral" and out["rule"] not in LIVE:
+        return dict(out, dir="neutral",
+                    reason="%s: not coloured yet - this rule is still being tested" % out["event"])
+    return out
 
 
 def _resolve(hits, row, by):
+    return _gate(_resolve_all(hits, row, by))
+
+
+def _resolve_all(hits, row, by):
     grey = {"dir": "neutral", "rule": None, "event": None, "text": None, "by": by}
     dom = [h for h in hits if h["dominant"]]
     if dom:
@@ -447,9 +502,11 @@ def _resolve(hits, row, by):
     if not pos and not neg:
         if hits:
             h = hits[0]
+            jc = h["rule"].startswith("JC-") or h["rule"] == "RATING-SAME"
             return dict(grey, rule=h["rule"], event=h["event"], text=h["phrase"],
-                        reason="%s is not good or bad on its face" % h["event"])
-        return dict(grey, reason="no specific phrase found")
+                        reason=("%s: not coloured - how to colour this kind of filing is still to be decided" if jc
+                                else "%s is not good or bad on its face") % h["event"])
+        return dict(grey, reason="no specific phrase in the filing says this is good or bad news")
     h = (pos or neg)[0]
     d = "positive" if pos else "negative"
     old = _OLD.get(row.get("dc", row.get("dir")), 0)

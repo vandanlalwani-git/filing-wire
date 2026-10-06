@@ -211,8 +211,10 @@ header{
 }
 .e-line{font-size:13.5px;line-height:1.55;color:var(--ink-2);margin-top:4px;max-width:74ch;}
 .e-meta{
-  display:flex;align-items:center;gap:9px;margin-bottom:5px;flex-wrap:wrap;
+  display:flex;align-items:flex-start;gap:9px;margin-bottom:5px;
 }
+/* tags wrap among themselves; the +/- stays on the first line at the right */
+.e-tags{display:flex;align-items:center;gap:9px;flex-wrap:wrap;flex:1;min-width:0;}
 .tag{
   font-family:'IBM Plex Mono',monospace;font-size:9.5px;
   letter-spacing:.1em;text-transform:uppercase;color:var(--mute);
@@ -333,7 +335,7 @@ header{
 .e-sum:focus-visible{outline:2px solid var(--watch);outline-offset:3px;border-radius:2px;}
 .e-chev{
   font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1;color:var(--faint);
-  margin-left:auto;padding-left:6px;
+  margin-left:auto;padding-left:6px;flex:none;padding-top:3px;
 }
 .entry:hover .e-chev,.entry.open .e-chev{color:var(--ink-2);}
 .e-xwrap{grid-column:3 / -1;cursor:auto;}

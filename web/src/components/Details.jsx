@@ -20,10 +20,11 @@ export function whyText(side) {
   const word = DIR_WORD[side.dir] || 'Unclassified'
   const w = side.why
   if (!w) return `${word}: ${side.lab}.`
-  if (w.rule) {                       // new rules (Part C) say which phrase decided it
+  if (w.rule || w.reason) {           // new rules (Part C) say which phrase decided it
+    const where = w.by === 'pdf' ? 'the PDF says' : 'the text says'
     return side.dir === 'neutral'
-      ? `Unclassified: ${w.reason || 'the text doesn’t say whether this is good or bad news.'}`
-      : `${word}: ${w.event || side.lab} — the text says “${w.text}”.`
+      ? `Unclassified: ${(w.reason || 'the text doesn’t say whether this is good or bad news').replace(/\.?$/, '.')}`
+      : `${word}: ${w.event || side.lab} — ${where} “${w.text}”.`
   }
   if (w.by === 'phrase') {
     return side.dir === 'neutral'

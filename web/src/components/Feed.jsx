@@ -37,10 +37,12 @@ export default function Feed({ rows, visible, missing, isToday, limit, setLimit,
           <div className="e-sum" role="button" tabIndex={0} aria-expanded={isOpen}
             aria-controls={'x-' + r.id} onKeyDown={onKey}>
             <div className="e-meta">
-              <span className={'dirmark ' + r.dir}>{DIR_LABEL[r.dir] || 'Unclassified'}</span>
-              <span className="tag">{r.lab}</span>
-              {r.sec && r.sec !== 'Other' && <span className="tag">· {r.sec}</span>}
-              {w && <span className="wflag">Watchlist</span>}
+              <div className="e-tags">
+                <span className={'dirmark ' + r.dir}>{DIR_LABEL[r.dir] || 'Unclassified'}</span>
+                <span className="tag">{r.lab}</span>
+                {r.sec && r.sec !== 'Other' && <span className="tag">· {r.sec}</span>}
+                {w && <span className="wflag">Watchlist</span>}
+              </div>
               <span className="e-chev" aria-hidden="true">{isOpen ? '−' : '+'}</span>
             </div>
             <div className="e-co">{r.co}</div>
