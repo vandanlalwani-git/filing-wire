@@ -125,7 +125,9 @@ EVENTS = [
          rx=r"(update|status) on (the )?order execution|order execution (update|status)|"
             r"amendment\s?(of|in|to)\s?(the |an |existing )?\s?(work\s?order|purchase\s?order|order|contract)|"
             r"(further to|with reference to|in continuation (of|to)) (our|the) (earlier|previous) (intimation|disclosure|letter|communication).{0,300}"
-            r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)"),
+            r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)|"
+            r"revised intimation|revision (in|of|to) (the |our )?(earlier |previous )?(intimation|disclosure|letter)|inadvertent(ly)? (error|typographical)|"
+            r"in continuation (of|to) our (earlier |previous )?(intimation|disclosure|letter)[^|]{0,600}(has |have )?(executed|signed|entered into)[^|]{0,60}(agreement|\bppa\b|contract)"),
     dict(id="BID-L1", event="Lowest/highest bidder, not yet awarded", dir=0, dominant=True, where="any",
          rx=r"(declared|emerged|stood|been) (as )?(the )?(l-?1|lowest bidder|h-?1|highest bidder)",
          block=r"(letters? of (award|acceptance|intent)|\blo[ai]\b|work orders? (has been |was )?(received|issued)|purchase orders? (has been |was )?received|contract win|has (now )?received)",
@@ -134,10 +136,15 @@ EVENTS = [
          rx=r"\bempanel\w*"),
     dict(id="FRAMEWORK", event="Framework agreement / potential business, no firm order", dir=0, dominant=True, where="text",
          rx=r"(framework agreement|potential (export )?suppl|indicative (programme|program|value|ceiling)|memorandum of understanding|\bmou\b)"),
+    dict(id="ARBITRATION", event="Arbitration or court outcome, not an order", dir=0, dominant=True, where="any",
+         rx=r"\barbitra(l|tion|tor|tors)\b"),
     dict(id="ORDER-PLACED", event="Company is placing an order with a supplier (it is the buyer)", dir=0, dominant=True, where="any",
-         rx=r"(placement of (the |a )?(purchase |work )?orders?,? on|has placed (the )?(following |an? )?(purchase |work )?orders?|approv\w* (for )?(the )?placement of)"),
+         rx=r"(placement of (the |a )?(purchase |work )?orders?,? on|has placed (the )?(following |an? )?(purchase |work )?orders?|approv\w* (for )?(the )?placement of|"
+            r"coal linkages?|supply of [^.]{0,80} to the company|"
+            r"(letter of intent|loi|agreement|order|contract)s? (with|on|to) [^.]{0,80}\bfor (the )?(acquisition|purchase|procurement|buying) of|"
+            r"(to|will) (acquire|purchase|procure|buy) [^.]{0,40}(aircraft|machines|equipment|vessels?|ships?|rakes|wagons|locomotives))"),
     dict(id="ORDER-CANCEL", event="Order or letter of award cancelled", dir=0, dominant=True, where="any",
-         rx=r"(cancell?ation of (the |a )?(letter of (award|acceptance|intent)|loa|loi|order|contract|work order|purchase order)|"
+         rx=r"((cancell?ation|withdrawal|termination|revocation|annulment|foreclosure|short.?closure) of (the |a )?(letter of (award|acceptance|intent)|loa|loi|order|contract|work order|purchase order)|"
             r"(letter of (award|acceptance|intent)|\bloa\b|order|contract) .{0,120}(has been|was|stands) (cancell?ed|terminated|withdrawn))"),
     dict(id="ORDER-ASSOC", event="Order won by an associate company, not the company or a subsidiary", dir=0, where="any",
          rx=r"\b(our |its |the company'?s? |an )?associate (company|companies|entity|concern)\b"),
@@ -194,29 +201,33 @@ EVENTS = [
             r"establishment inspection report|\beir\b|voluntary action indicated|\bvai\b|no action indicated|\bnai\b|"
             r"(not related to|non-?)\s?gmp|no gmp observation|"
             r"(usfda|us fda|fda).{0,60}(final|tentative) approval|(final|tentative) approval.{0,60}(usfda|us fda|fda))"),
-    dict(id="BUYBACK-NEW", event="New buyback approved by the board", dir=+1, where="any",
-         rx=r"(board[^.;]{0,160}\b(approv\w*|consider\w* and approv\w*)[^.;]{0,120}\bbuy.?back|"
-            r"approv\w* (of |for )?(the )?(proposal (for|of|to) )?(the )?buy.?back of[^.;]{0,60}(equity )?shares|"
-            r"buy.?back of[^.;]{0,120}(has been|was|is) approved by the board)",
-         block=r"(daily report|post.?buy.?back|public announcement|letter of offer|record date|extinguish\w*|"
-               r"completion of (the )?buy.?back|closure of (the )?buy.?back|tendering period|bought back|"
-               r"intimation (of|for|regarding) (the )?(board )?meeting|(will|to) consider|proposal to consider|"
-               r"pursuant to the (approval|resolution)|in (terms|accordance|pursuance) (of|with) the|approved by the board (of directors )?(of the company )?(at its meeting )?(held )?on \d|"
-               r"escrow|offer (opens|closes|period)|corrigendum|newspaper|shareholders?'? approv\w*|postal ballot|special resolution|"
-               r"rejected|not approv\w*|did not approve|withdraw\w*|deferred)", window=200),
+    dict(id="BUYBACK-NEW", event="New buyback approved by the board", dir=+1, where="text",
+         # the board's own announcement only; the public announcement, the
+         # newspaper copy, the certified board resolution, daily reports and
+         # the rest of the process that follows are grey
+         rx=r"(board[^|]{0,120}\bapprov\w*[^|]{0,80}buy.?back|\bapprov\w*[^|]{0,40}buy.?back|outcome[^|]{0,80}buy.?back|buy.?back[^|]{0,60}\bapprov\w*)",
+         block=r"(public announcement|newspaper|advertisement|board resolution|resolution passed|certified|post.?buy|commencement|intention|"
+               r"special resolution|postal ballot|shareholders?|letter of offer|record date|daily|completion|closure|\bclosed|extinguish\w*|"
+               r"updates? (regarding|on|in respect)|further to|reference to|continuation|corrigendum|tender form|escrow|"
+               r"intimation of (the )?(board )?meeting|to consider|will consider|consider and evaluate|proposal to|"
+               r"rejected|not approv\w*|did not approve|withdraw\w*|deferred|dropped)", window=400),
     dict(id="ID-RESIGN-GOV", event="Independent director resigned citing governance concerns", dir=-1, where="any",
          rx=r"(governance (concerns?|issues?|lapses?|failures?|deficienc\w*)|"
-            r"(disagree\w*|differences? of opinion|difference in opinion) (with|between)[^.;]{0,40}(board|management|promoters?|other directors|chairman|chairperson|managing director)|"
+            r"(disagree\w*|differences? of opinion|difference in opinion) (with|between|over|on|about|regarding)|remains? (a |an )?disagreement|"
             r"lack of (transparency|information|co-?operation|access|independence|oversight)|"
             r"(not|never) (been )?(provided|furnished|given|shared)[^.;]{0,60}(information|documents|records|details)|"
-            r"(serious |grave )?concerns? (over|about|regarding|on|with)[^.;]{0,60}(management|board|functioning|conduct|governance|transactions?|accounts|financial statements|related part\w*)|"
+            r"(serious |grave |certain )?concerns? (over|about|regarding|on|with|in relation to|relating to|in respect of|raised|identified)[^.;]{0,80}"
+            r"(management|board|functioning|conduct|governance|transactions?|accounts|financial statements|related part\w*|evaluation|chair\w*|audit|disclos\w*)|"
             r"(unable|not able|cannot) to (effectively )?discharge[^.;]{0,40}(duties|responsibilit\w*|role)|in protest|"
             r"irregularit\w*|non-?cooperation|(was|were|been) (kept|left) in the dark)",
-         need=r"independent director[\s\S]{0,4000}(resign|cessation|step(ped)? down)|(resign|cessation|step(ped)? down)[\s\S]{0,4000}independent director",
+         need=r"(?<!non-)(?<!non )(?<!non)independent director[\s\S]{0,4000}(resign|cessation|step(ped)? down)|(resign|cessation|step(ped)? down)[\s\S]{0,4000}(?<!non-)(?<!non )(?<!non)independent director",
          need_window=6000,
-         block=r"(\bno (other )?(material )?(reasons?|disagreement|differences?|concerns?)|not (due to|on account of|because of) any|"
-               r"without any (disagreement|difference)|there (is|was|are|were) no|nor any|none of|does not (have|involve)|"
-               r"other than (those|the one|the reasons?) (mentioned|stated|given)|personal (reasons|commitments)|pre-?occupation)", window=200),
+         # standard form lines ("whether the resignation is on account of any
+         # disagreement") and plain denials never count; "no OTHER material
+         # reasons" does not cancel reasons that are stated
+         block=r"((\bno|\bnot|without|\bnor|never|none)\b[^.;]{0,40}(disagreement|differences?|concerns?|issues?)|confirmation whether|whether the resignation|"
+               r"not on account|is not due|personal (reasons|commitments)|pre-?occupation|other (professional )?commitments|"
+               r"to whom(so)?ever (it|this) may concern|all concerned|concerned authorit\w*|governance (framework|report|practices))", window=120),
     dict(id="PLEDGE-REL", event="Pledge released", dir=+1, where="any",
          rx=r"(release|revocation) of (the )?(pledge|encumbrance|pledged)|pledge (released|revoked)"),
 
@@ -305,6 +316,8 @@ EVENTS = [
             r"(first|second) motion|nclt.?convened|court convened)"),
     dict(id="CIRP-ROUTINE", event="Routine step in an ongoing insolvency", dir=0, where="any",
          rx=r"(committee of creditors|\bcoc\b|resolution professional|under (corporate insolvency|cirp)|\(in cirp\))"),
+    dict(id="DEFAULT-FORM", event="Loan default disclosure", dir=0, where="text",
+         rx=r"(defaults? (on|in) (the )?(payment|repayment)|default in (re)?payment|\bdefault(ed)?\b)"),
     dict(id="RATING-SAME", event="Credit rating reaffirmed / assigned / withdrawn", dir=0, where="any",
          rx=r"(re-?affirm\w*|\baffirmed|ratings? (has been |have been )?assigned|assigned .{0,30}rating|rating.{0,40}withdrawn)"),
     dict(id="AUD-APPOINT", event="Auditor appointed", dir=0, where="text",
@@ -419,7 +432,7 @@ def _prep(text, row):
 
 ORDER_VETO = {"REG-ORDER", "TAX-DEMAND", "COMPOUNDING", "SEBI-ACTION", "BID-L1", "EMPANEL",
               "ORDER-UPDATE", "COURT-STEP", "NCLT-SCHEME",
-              "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC"}
+              "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC", "ARBITRATION"}
 
 
 def text_hits(row, blocked=None):
@@ -452,11 +465,34 @@ def _expand(h):
             "dominant": e.get("dominant", False), "src": "pdf", "lost": h.get("lost", False)}
 
 
+# Rules whose headline match is confirmed against the PDF before colouring:
+# the PDF may show the "order" is the company's own purchase, a cancellation,
+# an associate's win, an arbitration, a bid status or a follow-up.
+PDF_CHECK = {"ORDER-WIN"}
+
+
 def needs_pdf(row):
-    """True when the filing's own text names no decisive event."""
+    """True when the filing's own text names no decisive event, or names one
+    that is only coloured after the PDF has been checked."""
     hits = text_hits(row)
+    if {h["rule"] for h in hits} & PDF_CHECK:
+        return True
     return not [h for h in hits if (h["dir"] != 0 or h["dominant"])
                 and not (h["rule"] == "TAX-DEMAND" and not h["lost"])]
+
+
+# Filings the exchanges rate routine whose PDF can still change the picture:
+# an independent director's resignation letter may cite governance concerns;
+# a default disclosure may report an actual missed payment.
+LOW_SEV_PDF = {"JC-ID-RESIGN", "DEFAULT-FORM"}
+
+
+_DEFAULT_CAT = re.compile(r"default", re.I)
+
+
+def low_sev_pdf(row):
+    return bool({h["rule"] for h in text_hits(row)} & LOW_SEV_PDF
+                or _DEFAULT_CAT.search(row.get("sub") or ""))
 
 
 def is_pledge_pdf(row):
@@ -478,7 +514,7 @@ def decide(row, pdf_text=None, pdf_info=None):
         return {"dir": row["dir"], "rule": "PLEDGE-PDF", "event": row.get("lab"),
                 "text": w.get("text"), "reason": None, "by": "pdf"}
 
-    if row.get("sev", 0) < 2:
+    if row.get("sev", 0) < 2 and not low_sev_pdf(row):
         pdf_info = None
     elif pdf_info is None and pdf_text:
         pdf_info = scan_pdf(row, pdf_text)
@@ -486,6 +522,13 @@ def decide(row, pdf_text=None, pdf_info=None):
 
     blocked = set()
     raw = text_hits(row, blocked)
+    # not yet checked against its PDF: wait (the next run reads it)
+    if (pdf_info is None and row.get("sev", 0) >= 2 and row.get("att")
+            and {h["rule"] for h in raw} & PDF_CHECK & LIVE):
+        h = [h for h in raw if h["rule"] in PDF_CHECK][0]
+        return {"dir": "neutral", "rule": h["rule"], "event": h["event"], "text": h["phrase"],
+                "reason": "%s: waiting for the PDF to be checked" % h["event"], "by": "text",
+                "rules": sorted({x["rule"] for x in raw})}
     # a headline "order" the PDF shows to be a regulator's order, a bid status,
     # an empanelment or a follow-up to an order already disclosed is not a win
     pdf_rules = {h["rule"] for h in (pdf_info or {}).get("hits") or []}
@@ -519,7 +562,9 @@ def decide(row, pdf_text=None, pdf_info=None):
 # passes its own blind test (at least 95% right on fresh filings).
 # Stage 1 (6 Oct 2026): only rules that were right every time in blind tests.
 LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
-        "PLEDGE-NEW", "PLEDGE-REL", "PLEDGE-PDF"}
+        "PLEDGE-NEW", "PLEDGE-REL", "PLEDGE-PDF",
+        # Stage 2: 106 of 110 right (96.4%) on fresh, blind-labelled August filings
+        "ORDER-WIN"}
 
 # Labels the exchanges' categories gave that the filing's own text contradicts.
 # The row keeps its category in "sub"/"cat"; only the tag shown changes.

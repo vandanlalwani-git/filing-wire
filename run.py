@@ -392,7 +392,8 @@ def wants_pdf(row):
 def wants_events(row):
     """Notable/Critical rows whose own text names no decisive event: the PDF
     may (events.py reads its first pages)."""
-    return (row["sev"] >= 2 and bool(row.get("att")) and not events.is_pledge_pdf(row)
+    return ((row["sev"] >= 2 or (row["sev"] >= 1 and events.low_sev_pdf(row)))
+            and bool(row.get("att")) and not events.is_pledge_pdf(row)
             and events.needs_pdf(row))
 
 
@@ -459,7 +460,8 @@ def read_pdf(path, want_amount, want_pledge, row=None):
     text = pdf_to_text(path)
     if len(text) < 50:                      # scanned, ~4% of filings
         return {"s": "scanned"}
-    ev = events.scan_pdf(row, text) if row is not None and row["sev"] >= 2 else None
+    ev = (events.scan_pdf(row, text) if row is not None
+          and (row["sev"] >= 2 or events.low_sev_pdf(row)) else None)
     out = {"s": "no_match"}
     if want_pledge:
         pl = extract_pledge(path)
@@ -591,7 +593,7 @@ def _write(path, obj):
 #                    what later runs need (matching key, ISIN, subcategory,
 #                    attachment, first-seen time, which run found it)
 #   days/<day>.json  what the screen reads: shown filings only, v5's fields
-BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "dir", "dc", "lab",
+BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "isin", "sec", "sev", "sev0", "dir", "dc", "lab",
                "line", "amt", "sub", "att", "fs", "by", "hl", "subj", "cat", "why")
 SCREEN_FIELDS = ("id", "t", "ts", "co", "sec", "sev", "dir", "lab", "line")
 
@@ -846,8 +848,21 @@ def colour(rows, days, cache):
         if "dc" not in r:                     # filed before events.py existed
             r["dc"] = "neutral" if events.is_pledge_pdf(r) else r["dir"]
         entry = cache.get(cache_key(r)) if r.get("att") else None
-        out = events.decide(r, pdf_info=(entry or {}).get("ev"))
+        info = (entry or {}).get("ev")
+        if info is None and entry and (entry["s"] in ("scanned", "not_pdf", "unreadable")
+                                       or (entry["s"] == "fetch_failed"
+                                           and entry.get("n", 0) >= PDF_MAX_ATTEMPTS)):
+            info = {"hits": [], "blocks": []}   # can never give text: nothing in it
+        out = events.decide(r, pdf_info=info)
         r["dir"], r["why"] = out["dir"], _why(out)
+        # a routine-looking filing the rules colour (an independent director
+        # resigning over governance concerns) is shown as Notable; "sev0"
+        # keeps the exchange-category severity so re-colouring can undo it
+        if out["dir"] != "neutral" and r["sev"] < 2:
+            r.setdefault("sev0", r["sev"])
+            r["sev"] = 2
+        elif "sev0" in r and out["dir"] == "neutral":
+            r["sev"] = r.pop("sev0")
         lab = events.better_label(r, out.get("rules") or [])
         if lab:
             if r.get("line", "").startswith(r["lab"]):
@@ -915,16 +930,23 @@ def backfill(data_dir, first, last, log=print, progress="backfill.json"):
 
 
 # ================================================================== repair
-def repair(data_dir, first, last, log=print):
+REPAIR_PDF_BUDGET = 900         # PDFs one repair run may read, gently, for rule checks
+
+
+def repair(data_dir, first, last, log=print, fetch=True):
     """
-    Re-pair past days from the record book after a matching-rule change.
-    No network at all: nothing is fetched from the exchanges and no PDF is
-    downloaded. Each day is paired together with the day before it, exactly
-    as a live run does. PDF results already in the cache are re-applied to
-    any filing that is now shown; nothing else about a filing changes.
+    Re-pair and re-colour past days from the record book after a rule change.
+    Nothing is fetched from the exchanges' announcement lists. The only
+    network use: PDFs of filings whose colour waits on a PDF check
+    (events.PDF_CHECK) and that were never read, at the normal polite pace.
+    Each day is paired together with the day before it, exactly as a live
+    run does. PDF results already in the cache are re-applied to any filing
+    that is now shown; nothing else about a filing changes.
     """
     snap = COUNTER.snapshot()
     cache = _read(os.path.join(data_dir, "enrich_cache.json"), {})
+    sess = {}
+    read = 0
     d0 = datetime.strptime(first, "%Y-%m-%d")
     d1 = datetime.strptime(last, "%Y-%m-%d")
     totals = {"before": 0, "after": 0, "rows": 0}
@@ -940,6 +962,20 @@ def repair(data_dir, first, last, log=print):
         rows = load_day(data_dir, prev) + load_day(data_dir, d)
         _pair_inplace(rows)
         mine = [r for r in rows if r["ts"][:10] == d]
+        if fetch and read < REPAIR_PDF_BUDGET:
+            need = [r for r in mine if not r.get("dup_of") and r.get("att") and r["sev"] >= 2
+                    and events.text_events(r) & events.PDF_CHECK
+                    and "ev" not in (cache.get(cache_key(r)) or {})]
+            if need:
+                if not sess:
+                    sess["bse"] = bse_pdf_session()
+                    try:
+                        sess["nse"] = nse_session()
+                    except Exception:
+                        sess["nse"] = sess["bse"]
+                st = enrich(need, cache, sess["bse"], sess["nse"], REPAIR_PDF_BUDGET - read,
+                            True, log=lambda *_: None)
+                read += st["downloads"] + st["download_failed"]
         enrich([r for r in mine if not r.get("dup_of")], cache, None, None, 0, False,
                log=lambda *_: None)
         reapply_cached(mine, {d}, cache)
@@ -952,9 +988,9 @@ def repair(data_dir, first, last, log=print):
         log("  %s: %d filings, duplicates %d -> %d" % (d, len(mine), before, after))
     _write(os.path.join(data_dir, "enrich_cache.json"), cache)
     used = sum(COUNTER.since(snap).values())
-    log("repair: %d filings, duplicates merged %d -> %d, network requests: %d"
-        % (totals["rows"], totals["before"], totals["after"], used))
-    return 0 if used == 0 else 1
+    log("repair: %d filings, duplicates merged %d -> %d, PDFs read for rule checks: %d, "
+        "network requests: %d" % (totals["rows"], totals["before"], totals["after"], read, used))
+    return 0
 
 
 # ============================================================ public check
