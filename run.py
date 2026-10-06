@@ -665,6 +665,8 @@ def plan(now, status, mode, with_yesterday=False):
 # =================================================================== main
 def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
         max_pdfs=MAX_PDFS_PER_RUN, log=print, with_yesterday=False):
+    global RARE_DATA_DIR
+    RARE_DATA_DIR = data_dir
     t0 = time.time()
     snap = COUNTER.snapshot()
     now = now or datetime.now(IST)
@@ -868,12 +870,47 @@ def colour(rows, days, cache):
             if r.get("line", "").startswith(r["lab"]):
                 r["line"] = lab + r["line"][len(r["lab"]):]
             r["lab"] = lab
+    log_rare(rows, mine)
     # the two halves of a merged pair must not point opposite ways
     for r in mine:
         k = index.get(r.get("dup_of"))
         if k is not None and events.pair_conflict(k, r):
             for x in (k, r):
                 x["dir"], x["why"] = "neutral", _why(events.PAIR_CONFLICT)
+
+
+RARE_LOG = "rare_rules_log.json"
+RARE_DATA_DIR = None             # set by run()/repair(): where the log is kept
+
+
+def _link(r):
+    att = r.get("att") or ""
+    if r["src"] == "BSE" and att:
+        return "https://www.bseindia.com/xml-data/corpfiling/AttachLive/" + att
+    return att if att.startswith("http") else ""
+
+
+def log_rare(rows, mine):
+    """Every time a rare rule (events.RARE) colours a filing, keep a line for
+    the owner's weekly review: date, company, phrase, link. A rule found wrong
+    is switched off."""
+    if not RARE_DATA_DIR:
+        return
+    path = os.path.join(RARE_DATA_DIR, RARE_LOG)
+    log = _read(path, [])
+    seen = {e["id"] for e in log}
+    added = False
+    for r in mine:
+        w = r.get("why") or {}
+        if w.get("rule") in events.RARE and r["dir"] != "neutral" and r["id"] not in seen \
+                and not r.get("dup_of"):
+            log.append({"id": r["id"], "date": r["ts"][:16], "company": r["co"],
+                        "rule": w["rule"], "colour": r["dir"], "phrase": w.get("text"),
+                        "link": _link(r)})
+            seen.add(r["id"])
+            added = True
+    if added:
+        _write(path, sorted(log, key=lambda e: e["date"]))
 
 
 # ================================================================ backfill
@@ -937,12 +974,15 @@ def repair(data_dir, first, last, log=print, fetch=True):
     """
     Re-pair and re-colour past days from the record book after a rule change.
     Nothing is fetched from the exchanges' announcement lists. The only
-    network use: PDFs of filings whose colour waits on a PDF check
-    (events.PDF_CHECK) and that were never read, at the normal polite pace.
+    network use: PDFs that were never read of filings whose colour waits on a
+    PDF check (events.PDF_CHECK) or that the exchanges rate routine but whose
+    PDF can change the picture (events.low_sev_pdf), at the normal polite pace.
     Each day is paired together with the day before it, exactly as a live
     run does. PDF results already in the cache are re-applied to any filing
     that is now shown; nothing else about a filing changes.
     """
+    global RARE_DATA_DIR
+    RARE_DATA_DIR = data_dir
     snap = COUNTER.snapshot()
     cache = _read(os.path.join(data_dir, "enrich_cache.json"), {})
     sess = {}
@@ -963,8 +1003,9 @@ def repair(data_dir, first, last, log=print, fetch=True):
         _pair_inplace(rows)
         mine = [r for r in rows if r["ts"][:10] == d]
         if fetch and read < REPAIR_PDF_BUDGET:
-            need = [r for r in mine if not r.get("dup_of") and r.get("att") and r["sev"] >= 2
-                    and events.text_events(r) & events.PDF_CHECK
+            need = [r for r in mine if not r.get("dup_of") and r.get("att")
+                    and ((r["sev"] >= 2 and events.text_events(r) & events.PDF_CHECK)
+                         or (r["sev"] >= 1 and events.low_sev_pdf(r)))
                     and "ev" not in (cache.get(cache_key(r)) or {})]
             if need:
                 if not sess:

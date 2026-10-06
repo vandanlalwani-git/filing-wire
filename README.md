@@ -13,6 +13,16 @@ No AI is used anywhere: every filing is sorted by a fixed list of rules, and
 when the rules can't tell whether news is good or bad, it is marked
 Unclassified rather than guessed.
 
+## Rare rules
+
+Two events are too rare to test on 30 past filings, so they were switched on
+after showing no wrong colour on every filing available: a new buyback
+approved by the board (Favourable) and an independent director resigning over
+governance concerns (Adverse). Every time either one colours a filing it is
+recorded in `rare_rules_log.json` on the `data` branch (date, company, the
+phrase that triggered it, link to the filing) for a weekly review.
+If a rare-rule colour is wrong, it gets switched off.
+
 ## How often it updates
 
 The site updates roughly every 5 to 30 minutes. It runs on GitHub's free

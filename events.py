@@ -126,7 +126,7 @@ EVENTS = [
             r"amendment\s?(of|in|to)\s?(the |an |existing )?\s?(work\s?order|purchase\s?order|order|contract)|"
             r"(further to|with reference to|in continuation (of|to)) (our|the) (earlier|previous) (intimation|disclosure|letter|communication).{0,300}"
             r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)|"
-            r"revised intimation|revision (in|of|to) (the |our )?(earlier |previous )?(intimation|disclosure|letter)|inadvertent(ly)? (error|typographical)|"
+            r"revised (intimation|disclosure)|\(revised\)|extension of (the )?(letter of (award|acceptance|intent)|\bloa\b|contract|work order|order)|revision (in|of|to) (the |our )?(earlier |previous )?(intimation|disclosure|letter)|inadvertent(ly)? (error|typographical)|"
             r"in continuation (of|to) our (earlier |previous )?(intimation|disclosure|letter)[^|]{0,600}(has |have )?(executed|signed|entered into)[^|]{0,60}(agreement|\bppa\b|contract)"),
     dict(id="BID-L1", event="Lowest/highest bidder, not yet awarded", dir=0, dominant=True, where="any",
          rx=r"(declared|emerged|stood|been) (as )?(the )?(l-?1|lowest bidder|h-?1|highest bidder)",
@@ -140,7 +140,8 @@ EVENTS = [
          rx=r"\barbitra(l|tion|tor|tors)\b"),
     dict(id="ORDER-PLACED", event="Company is placing an order with a supplier (it is the buyer)", dir=0, dominant=True, where="any",
          rx=r"(placement of (the |a )?(purchase |work )?orders?,? on|has placed (the )?(following |an? )?(purchase |work )?orders?|approv\w* (for )?(the )?placement of|"
-            r"coal linkages?|supply of [^.]{0,80} to the company|"
+            r"coal linkages?|successful resolution applicant|(letter of intent|loi) for acquiring|for acquiring|"
+            r"supply of [^.]{0,80} to the company|"
             r"(letter of intent|loi|agreement|order|contract)s? (with|on|to) [^.]{0,80}\bfor (the )?(acquisition|purchase|procurement|buying) of|"
             r"(to|will) (acquire|purchase|procure|buy) [^.]{0,40}(aircraft|machines|equipment|vessels?|ships?|rakes|wagons|locomotives))"),
     dict(id="ORDER-CANCEL", event="Order or letter of award cancelled", dir=0, dominant=True, where="any",
@@ -173,11 +174,12 @@ EVENTS = [
          # a form whose column lists the options "new/ upgrade/ downgrade/ reaffirm"
          block=r"(new|positive|negative|stable|assigned|reaffirm\w*|downgrade|withdraw\w*)\s?/\s?(upgrad|downgrad)|upgrad\w*\s?/\s?(downgrad|rating|reaffirm|withdraw|other)", window=40),
     dict(id="ORDER-WIN", event="Order or contract win", dir=+1, where="any",
-         rx=r"(\border win\b|contract win|(receiv\w*|secur\w*|bag\w*|won|win|award\w*|receipt of|bagging) .{0,80}"
+         rx=r"(\border win\b|contract win|(receiv\w*|\bsecur(e|ed|es|ing)\b|\bbag(s|ged)?\b|won|win|award\w*|receipt of|bagging) .{0,80}"
             r"\b(orders?|contracts?|letters? of (award|intent|acceptance)|loa|loi|work orders?|purchase orders?|mandate)\b|"
             r"letters? of (award|intent|acceptance) .{0,60}\b(from|for|worth|valued|dated)\b|"
-            r"has been (awarded|selected as the successful)|renewal of .{0,60}contract.{0,80}increased scope)",
-         block=r"(penalty|order.in.original|order.in.appeal|\boio\b|assessment (order|year)|appeal|appellate|tribunal|nclt|\bcourt\b|motion|"
+            r"has been awarded (a |an |the |two |three |\d+ )?(new |fresh |major |large )?(work |purchase |turnkey |epc )?(contracts?|orders?|work|projects?|letters? of|loa|loi|tenders?|epc|mandate)|has been selected as the successful|renewal of .{0,60}contract.{0,80}increased scope)",
+         block=r"(\b(find|found|is|are|be|in) (it |them |the same )?in (good |proper )?order\b|\bin order to\b|world record|\bexpo\b|awards? (for|of) excellence|\bawards? 20\d\d|awarded (at|in) the [^.]{0,60}awards?\b|award(s)? (ceremony|function)|"
+               r"annual general meeting|\bagm\b|\broc\b|penalty|order.in.original|order.in.appeal|\boio\b|assessment (order|year)|appeal|appellate|tribunal|nclt|\bcourt\b|motion|"
                r"sebi (has )?(passed|issued|order)|order (passed|issued) by (the )?(sebi|securities and exchange board)|"
                r"demand|show.?cause|compounding|settlement|adjudicat|commissioner|customs|excise|income.?tax|"
                r"gst (department|dept|authorit|officer|order)|goods and services tax act|registrar of companies|rera|"
@@ -195,7 +197,9 @@ EVENTS = [
             r"inaugurat\w* .{0,60}(facility|plant|unit)|capacity (has been )?(enhanced|added) to|"
             r"operations .{0,120}restored to (their )?regular)",
          block=r"(for (its |our )?(reputed )?clients|executed for|on behalf of|proposed|expected to be|will be commissioned|scheduled|"
-               r"postpon\w*|delay\w*|deferr?\w*|pilot plant|(retail|multi.?brand|new) (store|showroom)s?)"),
+               r"postpon\w*|delay\w*|deferr?\w*|pilot plant|(retail|multi.?brand|new) (store|showroom)s?|"
+               r"on (an )?epc basis|being executed by|epc (contract|contractor)|commissioning certificate|"
+               r"\b(for|at) ([a-z&.]+ ){1,4}(private )?(limited|ltd)\b)", window=300),
     dict(id="DRUG-OK", event="Drug regulator: clean inspection / approval", dir=+1, where="any",
          rx=r"((zero|nil|no) (form )?(483 )?observations?|without any (form )?483|"
             r"establishment inspection report|\beir\b|voluntary action indicated|\bvai\b|no action indicated|\bnai\b|"
@@ -532,7 +536,7 @@ def decide(row, pdf_text=None, pdf_info=None):
     # a headline "order" the PDF shows to be a regulator's order, a bid status,
     # an empanelment or a follow-up to an order already disclosed is not a win
     pdf_rules = {h["rule"] for h in (pdf_info or {}).get("hits") or []}
-    order_veto = bool(pdf_rules & ORDER_VETO or "ORDER-ASSOC" in {h["rule"] for h in raw})
+    order_veto = bool((pdf_rules | {h["rule"] for h in raw}) & ORDER_VETO)
     if order_veto:
         raw = [h for h in raw if h["rule"] != "ORDER-WIN"]
     # a headline event whose outcome the PDF qualifies is dropped
@@ -563,8 +567,12 @@ def decide(row, pdf_text=None, pdf_info=None):
 # Stage 1 (6 Oct 2026): only rules that were right every time in blind tests.
 LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
         "PLEDGE-NEW", "PLEDGE-REL", "PLEDGE-PDF",
-        # Stage 2: 106 of 110 right (96.4%) on fresh, blind-labelled August filings
-        "ORDER-WIN"}
+        # 39 of 41 right (95.1%) on fresh, blind-labelled July + August filings
+        "COMMISSION",
+        # rare: no wrong colour on any filing available; every firing is logged
+        # (rare_rules_log.json) and the rule is switched off if one is wrong
+        "BUYBACK-NEW", "ID-RESIGN-GOV"}
+RARE = {"BUYBACK-NEW", "ID-RESIGN-GOV"}
 
 # Labels the exchanges' categories gave that the filing's own text contradicts.
 # The row keeps its category in "sub"/"cat"; only the tag shown changes.
