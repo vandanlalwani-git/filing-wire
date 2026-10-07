@@ -263,3 +263,28 @@ def judge(basis, cur, ly):
             return {"dir": "neutral", "text": s,
                     "reason": "%s - driven by exceptional item (%+.1f vs %+.1f Rs m before tax)" % (s, ec, el)}
     return {"dir": d, "text": s}
+
+
+def review(basis, cur, ly):
+    """The numbers behind a decision, for the daily review file:
+    (profit used, profit change, revenue change, exceptional items)."""
+    if not cur or not ly:
+        return None
+    if cur.get("owners") is None or ly.get("owners") is None:
+        cur, ly = dict(cur, owners=None), dict(ly, owners=None)
+    name, how = _label(basis, cur)
+    pc, pl = _p(cur), _p(ly)
+    if (pc > 0) != (pl > 0):
+        pchg = "loss to profit" if pc > 0 else "profit to loss"
+    elif pc < 0 and pl < 0:
+        pchg = "bigger loss" if pc < pl else "smaller loss"
+    else:
+        pchg = _fmt(_pct(pc, pl))
+    pchg += " (%s vs %s Rs m)" % (_money(pc), _money(pl))
+    ec, el = cur.get("exc"), ly.get("exc")
+    exc = "not given" if ec is None or el is None else "%s vs %s Rs m" % (_money(ec), _money(el))
+    return "%s (%s)" % (name, how), pchg, _fmt(_pct(cur["rev"], ly["rev"])), exc
+
+
+def _money(x):
+    return "{:,.1f}".format(x)

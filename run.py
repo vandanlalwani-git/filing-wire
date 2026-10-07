@@ -752,6 +752,8 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     if enrich_on and "RESULTS" in events.LIVE:
         results_stage(shown, rcache, bse_sess, nse_sess, now, log)
     colour(rows, touched, cache, rcache)
+    if not backfill_days:
+        write_results_review(data_dir, rows, touched, rcache)
 
     # 6. write
     written = {}
@@ -959,6 +961,55 @@ def result_outcome(r, rcache):
     if out["dir"] != "neutral" and "RESULTS" not in events.LIVE:
         out = dict(out, dir="neutral", reason="%s: not coloured yet - this rule is still being tested" % results.EVENT)
     return out
+
+
+# For two weeks of the results season, a file per day on the data branch
+# (reviews/results-<day>.md) lists every result the numbers coloured, with
+# the figures behind it, for checking by hand against the filings.
+REVIEW_DIR = "reviews"
+REVIEW_FROM, REVIEW_TO = "2026-10-07", "2026-10-21"
+_COLOUR = {"positive": "GREEN", "negative": "RED", "neutral": "grey"}
+
+
+def write_results_review(data_dir, rows, days, rcache):
+    for d in sorted(x for x in days if REVIEW_FROM <= x <= REVIEW_TO):
+        coloured, grey, waiting = [], [], 0
+        for r in sorted((x for x in rows if x["ts"][:10] == d), key=lambda x: x["ts"]):
+            if r.get("dup_of") or not results.is_result(r) or r["sev"] < 2 or not r.get("sc"):
+                continue
+            e = rcache.get(_rkey(r)) or {}
+            if not e.get("final"):
+                waiting += 1
+                continue
+            att = r.get("att") or ""
+            link = ("[PDF](https://www.bseindia.com/xml-data/corpfiling/AttachLive/%s) "
+                    "([after 3 days](https://www.bseindia.com/xml-data/corpfiling/AttachHis/%s))" % (att, att)
+                    if att else "")
+            w = r.get("why") or {}
+            nums = results.review(e.get("b"), e.get("c"), e.get("l"))
+            if w.get("by") == "data" and r["dir"] != "neutral" and nums:
+                basis, pchg, rchg, exc = nums
+                coloured.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                    r["ts"][11:16], r["co"], _COLOUR[r["dir"]], basis, pchg, rchg, exc, link))
+            else:
+                why = (w.get("reason") or w.get("text") or "").replace("|", "/")
+                if w.get("by") != "data":
+                    why = "decided by the filing's words: " + why
+                grey.append("| %s | %s | %s | %s |" % (r["ts"][11:16], r["co"], why, link))
+        g = sum(1 for x in coloured if "| GREEN |" in x)
+        out = ["# Results coloured on %s" % d, "",
+               "%d coloured (%d green, %d red) · %d grey · %d still waiting for BSE's figures" % (
+                   len(coloured), g, len(coloured) - g, len(grey), waiting), "",
+               "Figures in Rs million, this year's quarter vs the same quarter last year. "
+               "Exceptional items are before tax.", "",
+               "| Time | Company | Colour | Profit used (basis) | Profit YoY | Revenue YoY | Exceptional items | Filing |",
+               "|---|---|---|---|---|---|---|---|"] + (coloured or ["| | none yet | | | | | | |"]) + [
+               "", "## Not coloured (grey)", "",
+               "| Time | Company | Why | Filing |", "|---|---|---|---|"] + (grey or ["| | none | | |"])
+        path = os.path.join(data_dir, REVIEW_DIR, "results-%s.md" % d)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(out) + "\n")
 
 
 RARE_LOG = "rare_rules_log.json"
