@@ -918,8 +918,8 @@ def results_stage(shown, rcache, sess, nse_sess, now, log):
             continue
         k = _rkey(r)
         e = rcache.get(k) or {}
-        if e.get("final"):
-            continue
+        if e.get("final") and (not e.get("c") or "exc" in e["c"]):
+            continue                              # (looked up before exceptional items were kept: again)
         last = e.get("t")
         if last and (now - datetime.strptime(last, TS).replace(tzinfo=IST)).total_seconds() < RESULTS_RETRY_MIN * 60:
             continue
