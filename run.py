@@ -749,7 +749,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     reapply_cached(rows, touched, cache)
     rcache = _read(os.path.join(data_dir, RESULTS_CACHE), {})
     if enrich_on and "RESULTS" in events.LIVE:
-        results_stage(shown, rcache, bse_sess, now, log)
+        results_stage(shown, rcache, bse_sess, nse_sess, now, log)
     colour(rows, touched, cache, rcache)
 
     # 6. write
@@ -907,7 +907,7 @@ def _rkey(r):
     return "%s|%s" % (r.get("sc"), results.qcode(y, mo))
 
 
-def results_stage(shown, rcache, sess, now, log):
+def results_stage(shown, rcache, sess, nse_sess, now, log):
     """Look up structured figures for new results filings (BSE's own data,
     current quarter and the same quarter a year earlier). Figures that are
     not out yet are tried again later, up to RESULTS_MAX_TRIES times."""
@@ -928,6 +928,11 @@ def results_stage(shown, rcache, sess, now, log):
         done += 1
         try:
             basis, cur, ly = results.fetch(sess, r["sc"], k.split("|")[1])
+            if basis == "consolidated" and cur and ly and nse_sess is not None:
+                try:            # owners' share of profit, from NSE; total profit if not there
+                    cur["owners"], ly["owners"] = results.owners(sess, nse_sess, r["sc"], cur["end"], ly["end"])
+                except Exception:
+                    pass
         except Exception as ex:                       # network trouble: try later
             rcache[k] = dict(e, t=now.strftime(TS), n=e.get("n", 0) + 1, err=type(ex).__name__)
             continue

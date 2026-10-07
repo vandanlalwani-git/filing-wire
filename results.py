@@ -2,20 +2,24 @@
 Quarterly results, coloured from numbers instead of words. Rules only.
 
 BSE publishes every listed company's results as structured figures (free,
-no key): revenue and net profit for any quarter, standalone and
-consolidated. A results filing is compared with the SAME quarter a year
-earlier, consolidated if both quarters have it, else standalone:
+no key): revenue, net profit and exceptional items for any quarter,
+standalone and consolidated. A results filing is compared with the SAME
+quarter a year earlier, consolidated if both quarters have it, else
+standalone. For consolidated results the profit used is the profit
+attributable to owners of the parent, read from the company's own XBRL on
+NSE; when that is not available (BSE-only company, or the figure left
+blank) the total profit is used and the row says so.
 
-  GREEN  net profit up 10% or more and revenue not down,
-         or a loss turned into a profit with revenue not down
-  RED    net profit down more than 10%, a profit turned into a loss,
-         or a loss that widened by more than 10%
-  GREY   anything else: small or mixed changes, a loss that narrowed,
-         no year-ago figures, no revenue, or a company type whose figures
-         are not wired in yet (NBFC and insurer formats)
+  GREEN  profit up 10% or more and revenue not down; or a loss turned
+         into a profit
+  RED    profit down more than 10%; a profit turned into a loss; or a
+         bigger loss than a year ago
+  GREY   small or mixed changes; a smaller loss (still a loss); a change
+         driven mostly (more than half) by exceptional items; no year-ago
+         figures; no revenue; NBFC and insurer formats (not wired in yet)
 
-The expanded row shows the numbers, e.g. "PAT +23% YoY, revenue +11%
-(consolidated)", so anyone can check them against the filing.
+The expanded row shows the numbers and which profit and basis were used,
+e.g. "Owners' profit +23% YoY, revenue +11% (consolidated)".
 """
 
 import re
@@ -79,6 +83,18 @@ def _pick(d, keys):
     return None
 
 
+def _exceptional(d):
+    """Exceptional items (before tax) for the quarter, or None if unknown."""
+    v = _num(d.get("Exceptional Item"))
+    if v is not None:
+        return v
+    pbt = _num(d.get("Profit (+)/ Loss (-) from Ordinary Activities before Tax"))
+    pre = _num(d.get("Profit after Interest but before Exceptional Items"))
+    if pbt is None or pre is None or (pbt == 0 and pre != 0):    # a blank PBT is not a loss
+        return None
+    return round(pbt - pre, 4)
+
+
 def _figures(d, cons):
     if not d or not (d.get("Date End") or "").strip():
         return None
@@ -88,7 +104,51 @@ def _figures(d, cons):
         pat = _num(d.get("Net Profit"))
     if rev is None or pat is None:
         return None
-    return {"end": d.get("Date End"), "rev": rev, "pat": pat}
+    return {"end": d.get("Date End"), "rev": rev, "pat": pat, "exc": _exceptional(d)}
+
+
+# ---- owners' share of profit, from the company's own XBRL on NSE ---------
+NSE_LIST = "https://www.nseindia.com/api/integrated-filing-results"
+_MON = "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split()
+
+
+def _qe(end):
+    """'30-Jun-26' -> '30-JUN-2026' (NSE's quarter-end format)."""
+    dd, mon, yy = end.split("-")
+    return "%s-%s-20%s" % (dd, mon.upper(), yy)
+
+
+def _owners_from_xbrl(text):
+    m = re.search(r'<in-capmkt:ProfitOrLossAttributableToOwnersOfParent\b[^>]*contextRef="OneD"[^>]*>([^<]*)<', text)
+    v = _num(m.group(1)) if m else None
+    i = re.search(r"<in-capmkt:ISIN\b[^>]*>([^<]*)<", text)
+    return (v / 1e6 if v else None), (i.group(1).strip() if i else None)
+
+
+def owners(bse_sess, nse_sess, sc, cur_end, ly_end):
+    """(current, year_ago) profit attributable to owners of the parent, in
+    Rs million, or (None, None) when NSE does not have both."""
+    time.sleep(DELAY)
+    meta = bse_sess.get(API + "ComHeadernew/w", params={"quotetype": "EQ", "scripcode": sc, "seriesid": ""},
+                        timeout=(10, 30)).json()
+    sym, isin = (meta.get("SecurityId") or "").strip(), (meta.get("ISIN") or "").strip()
+    if not sym:
+        return None, None
+    time.sleep(DELAY)
+    lst = nse_sess.get(NSE_LIST, params={"symbol": sym, "type": "Integrated Filing- Financials"},
+                       timeout=(10, 30)).json().get("data", [])
+    out = []
+    for end in (cur_end, ly_end):
+        cands = [x for x in lst if (x.get("qe_Date") or "").upper() == _qe(end) and x.get("consolidated") == "Consolidated"]
+        cands.sort(key=lambda x: (x.get("type_Sub") or "Original") != "Original")
+        if not cands or not cands[0].get("xbrl"):
+            return None, None
+        time.sleep(DELAY)
+        v, xi = _owners_from_xbrl(nse_sess.get(cands[0]["xbrl"], timeout=(10, 30)).text)
+        if v is None or (isin and xi and xi != isin):
+            return None, None
+        out.append(v)
+    return out[0], out[1]
 
 
 def _std(sess, sc, q):
@@ -132,12 +192,28 @@ def _fmt(x):
     return "n/a" if x is None else "%+.0f%%" % x
 
 
+def _label(basis, cur):
+    if basis != "consolidated":
+        return "Net profit", "standalone"
+    if cur.get("owners") is not None:
+        return "Owners' profit", "consolidated"
+    return "Total profit", "consolidated; owners' share not available"
+
+
+def _p(f):
+    return f["owners"] if f.get("owners") is not None else f["pat"]
+
+
 def summary(basis, cur, ly):
-    if (cur["pat"] > 0) != (ly["pat"] > 0):
-        pat = "PAT turned %s" % ("to a profit (loss a year ago)" if cur["pat"] > 0 else "to a loss (profit a year ago)")
+    name, how = _label(basis, cur)
+    pc, pl = _p(cur), _p(ly)
+    if (pc > 0) != (pl > 0):
+        pat = "%s: %s" % (name, "turned to a profit (a loss a year ago)" if pc > 0 else "turned to a loss (a profit a year ago)")
+    elif pc < 0 and pl < 0:
+        pat = "%s: %s loss than a year ago" % (name, "bigger" if pc < pl else "smaller")
     else:
-        pat = "PAT %s YoY" % _fmt(_pct(cur["pat"], ly["pat"]))
-    return "%s, revenue %s (%s)" % (pat, _fmt(_pct(cur["rev"], ly["rev"])), basis)
+        pat = "%s %s YoY" % (name, _fmt(_pct(pc, pl)))
+    return "%s, revenue %s (%s)" % (pat, _fmt(_pct(cur["rev"], ly["rev"])), how)
 
 
 def _year_ago(cur, ly):
@@ -157,22 +233,33 @@ def judge(basis, cur, ly):
                 "reason": "no structured figures for this filing (yet), or a company type not wired in"}
     if not ly or not _year_ago(cur, ly):
         return {"dir": "neutral", "text": None, "reason": "no figures for the same quarter last year"}
+    if cur.get("owners") is None or ly.get("owners") is None:     # like for like
+        cur, ly = dict(cur, owners=None), dict(ly, owners=None)
     s = summary(basis, cur, ly)
-    rp, pp = _pct(cur["rev"], ly["rev"]), _pct(cur["pat"], ly["pat"])
-    if ly["pat"] > 0 and cur["pat"] <= 0:
-        return {"dir": "negative", "text": s}
-    if ly["pat"] <= 0 < cur["pat"]:
-        if rp is None or rp >= 0:
-            return {"dir": "positive", "text": s}
-        return {"dir": "neutral", "text": s, "reason": "%s - mixed" % s}
-    if ly["pat"] < 0 and cur["pat"] < 0:
-        if cur["pat"] < ly["pat"] * 1.10:
-            return {"dir": "negative", "text": s + " - loss widened"}
-        return {"dir": "neutral", "text": s, "reason": "%s - still loss-making" % s}
-    if pp is None:
+    pc, pl = _p(cur), _p(ly)
+    rp, pp = _pct(cur["rev"], ly["rev"]), _pct(pc, pl)
+    if pl > 0 and pc <= 0:
+        d = "negative"                                   # profit turned into a loss
+    elif pl <= 0 < pc:
+        d = "positive"                                   # loss turned into a profit
+    elif pl < 0 and pc < 0:
+        if pc < pl * 1.01:
+            d = "negative"                               # a bigger loss
+        else:
+            return {"dir": "neutral", "text": s, "reason": "%s - still a loss" % s}
+    elif pp is None:
         return {"dir": "neutral", "text": s, "reason": "%s - no comparison" % s}
-    if pp < -10:
-        return {"dir": "negative", "text": s}
-    if pp >= 10 and (rp is None or rp >= 0):
-        return {"dir": "positive", "text": s}
-    return {"dir": "neutral", "text": s, "reason": "%s - small or mixed change" % s}
+    elif pp < -10:
+        d = "negative"
+    elif pp >= 10 and (rp is None or rp >= 0):
+        d = "positive"
+    else:
+        return {"dir": "neutral", "text": s, "reason": "%s - small or mixed change" % s}
+    # a move made mostly of exceptional items is not the business doing better or worse
+    ec, el = cur.get("exc"), ly.get("exc")
+    if ec is not None and el is not None:
+        de, dp = ec - el, pc - pl
+        if dp and de and (de > 0) == (dp > 0) and abs(de) > 0.5 * abs(dp):
+            return {"dir": "neutral", "text": s,
+                    "reason": "%s - driven by exceptional item (%+.1f vs %+.1f Rs m before tax)" % (s, ec, el)}
+    return {"dir": d, "text": s}
