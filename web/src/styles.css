@@ -352,6 +352,55 @@ header{
 .xp a{color:var(--watch);text-decoration:underline;text-underline-offset:2px;}
 .xp a:hover{color:var(--ink);}
 
+
+/* search: two groups, Filings and Companies (v5's dropdown, with group labels) */
+#drop{max-height:min(440px,70vh);}
+.dgrp{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--mute);padding:9px 12px 5px;
+  background:var(--paper-2);border-bottom:1px solid var(--rule);
+}
+.dopt.dco{justify-content:flex-start;gap:10px;}
+.dco-id{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
+.dco-id .dc{white-space:normal;}
+.dopt.dco .star{flex:none;}
+.dopt.none.retry{cursor:pointer;}
+/* company "icon": initials only, no external logos */
+.badge{
+  flex:none;width:30px;height:30px;border-radius:2px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:500;letter-spacing:.04em;
+  color:var(--ink-2);background:var(--paper-2);border:1px solid var(--rule-2);
+}
+.badge.on{color:var(--watch);background:var(--watch-wash);border-color:#C9D5E8;}
+
+/* Watchlist tab: one block per company, its last 30 days of filings */
+.wv-note{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint);padding:16px 0 4px;
+}
+.wco{border-bottom:1px solid var(--rule-2);padding:6px 0 14px;}
+.wco-head{display:flex;align-items:center;gap:12px;padding:12px 14px 8px 10px;}
+.wco-head .badge{width:34px;height:34px;font-size:11px;color:var(--watch);background:var(--watch-wash);border-color:#C9D5E8;}
+.wco-id{flex:1;min-width:0;}
+.wco-name{font-family:Newsreader,serif;font-size:19px;font-weight:600;letter-spacing:-.011em;line-height:1.2;overflow-wrap:anywhere;}
+.wco-codes{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--mute);margin-top:3px;}
+.wco-none{
+  padding:10px 14px 6px 56px;color:var(--faint);font-size:14px;
+  font-family:Newsreader,serif;font-style:italic;
+}
+.wco .entry:last-of-type{border-bottom:none;}
+.wco-more{
+  padding:10px 14px 0 56px;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mute);
+}
+.wco-more:hover{color:var(--ink);}
+.watchview .e-time{display:flex;flex-direction:column;gap:2px;}
+.e-day{color:var(--ink-2);}
+#watchbar .wb-note{flex-basis:100%;color:var(--watch);}
+#watchbar .wb-note button{margin-left:8px;color:var(--watch);border-bottom-color:var(--watch);}
+
 /* footer line */
 #foot{
   padding:30px 0 0;text-align:center;
@@ -403,6 +452,10 @@ header{
   .e-line{font-size:13px;}
   .entry.s1 .e-line{font-size:12.5px;}
   .star{width:36px;height:36px;font-size:16px;padding:0;}
+  .dopt.dco{padding:10px 4px 10px 12px;}
+  .wco-head{padding:12px 2px 8px 4px;}
+  .wco-none,.wco-more{padding-left:50px;}
+  .watchview .e-time{font-size:10px;}
   #foot{padding:24px 8px 0;}
   .e-xwrap{grid-column:1 / -1;padding:0 4px 0 6px;}
   .xp a{display:inline-block;padding:6px 0;}       /* comfortable tap target */

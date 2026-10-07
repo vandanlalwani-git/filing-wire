@@ -47,6 +47,7 @@ from classify import classify, normalise_text                     # noqa: E402
 from classify import RULES as BSE_RULES, OVERRIDES as BSE_OVERRIDES   # noqa: E402
 from merge import classify_nse, norm_name, pair_rows              # noqa: E402
 import events                                                      # noqa: E402
+import directory                                                   # noqa: E402
 import results                                                     # noqa: E402
 from merge import NSE_RULES, NSE_OVERRIDES                        # noqa: E402
 from enrich import (extract_amount, extract_pledge,               # noqa: E402
@@ -1192,6 +1193,13 @@ def main():
            if a.now else None)
     metrics, ex = run(a.data_dir, a.mode, a.day, not a.no_enrich, now, a.max_pdfs,
                       with_yesterday=a.with_yesterday)
+    if not a.day:
+        # the list of every listed company, for search and the watchlist:
+        # read once a day; a source that fails keeps its previous list
+        try:
+            directory.refresh(a.data_dir, now)
+        except Exception as e:                      # never let it stop the feed
+            print("  directory: skipped (%s: %s)" % (type(e).__name__, e))
     if a.metrics:
         _write(a.metrics, {"metrics": metrics, "exchanges": ex})
     # One exchange down is not a failure: it is recorded in status.json and

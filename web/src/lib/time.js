@@ -41,3 +41,7 @@ export function fmtMin(m) {
   const h = Math.floor(m / 60), mm = Math.round(m % 60)
   return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0')
 }
+
+/** "2026-10-06" -> "6 Oct" */
+export const fmtShort = d =>
+  new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })

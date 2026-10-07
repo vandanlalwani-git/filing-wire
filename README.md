@@ -13,6 +13,17 @@ No AI is used anywhere: every filing is sorted by a fixed list of rules, and
 when the rules can't tell whether news is good or bad, it is marked
 Unclassified rather than guessed.
 
+## Watchlist
+
+Search finds any company listed on NSE or BSE (about 6,000, from the
+exchanges' own lists, refreshed once a day), not only those that filed
+recently. Tap ☆ to watch it; the Watchlist tab then shows each watched
+company with its filings from the last 30 days. Companies are matched by
+ISIN, so a renamed company or a different spelling on the two exchanges still
+matches. A broker's holdings CSV (e.g. Zerodha) can be imported: symbols,
+ISINs, BSE codes and names are all recognised. The watchlist is kept only in
+your browser.
+
 ## Rare rules
 
 Two events are too rare to test on 30 past filings, so they were switched on

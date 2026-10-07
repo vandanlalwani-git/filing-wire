@@ -3,15 +3,13 @@ import Details from './Details.jsx'
 const DIR_LABEL = { negative: 'Adverse', positive: 'Favourable', neutral: 'Unclassified' }
 const FOOT = 'Disclosure events only, classified by fixed rules. Not investment advice. Source: BSE and NSE public filings.'
 
-export default function Feed({ rows, visible, missing, isToday, limit, setLimit, isWatched, toggleWatch, watchEmpty,
+export default function Feed({ rows, visible, missing, isToday, limit, setLimit, isWatched, toggleWatch,
   open, toggle, details, detState, today }) {
   let body
   if (rows === null) {
     body = <div id="empty">Loading the wire…</div>
   } else if (missing || !rows.length) {
     body = <div id="empty">{isToday ? 'No disclosures recorded yet today.' : 'No record for this day.'}</div>
-  } else if (watchEmpty) {
-    body = <div id="empty">Your watchlist is empty. Tap ☆ on any filing to add the company, or import a CSV.</div>
   } else if (!visible.length) {
     body = <div id="empty">Nothing matches the current filters.</div>
   } else {
@@ -24,7 +22,7 @@ export default function Feed({ rows, visible, missing, isToday, limit, setLimit,
         out.push(<div key={'h' + hr + r.id} className="hourrule"><span>{hr}00 hrs</span><i></i></div>)
         lastHour = hr
       }
-      const w = isWatched(r.co)
+      const w = isWatched(r)
       const isOpen = open.has(r.id)
       const onKey = e => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.id) }
@@ -51,7 +49,7 @@ export default function Feed({ rows, visible, missing, isToday, limit, setLimit,
           <button className={'star' + (w ? ' on' : '')}
             title={(w ? 'Remove from' : 'Add to') + ' watchlist'}
             aria-label={(w ? 'Remove ' : 'Add ') + r.co + (w ? ' from' : ' to') + ' watchlist'}
-            onClick={e => { e.stopPropagation(); toggleWatch(r.co) }}>{w ? '★' : '☆'}</button>
+            onClick={e => { e.stopPropagation(); toggleWatch(r) }}>{w ? '★' : '☆'}</button>
           {isOpen && (
             <div id={'x-' + r.id} className="e-xwrap">
               <Details d={details && details[r.id]} today={today}
