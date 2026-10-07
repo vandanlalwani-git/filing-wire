@@ -72,11 +72,12 @@ jobs:
           jobs=$(for id in $(for st in in_progress queued waiting; do gh api "repos/$GITHUB_REPOSITORY/actions/workflows/collector.yml/runs?status=$st&per_page=30" --jq '.workflow_runs[].id'; done); do
                    [ "$id" = "$GITHUB_RUN_ID" ] && continue
                    gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" \
-                     --jq ".jobs[] | select(.name==\"collect\" and .status!=\"completed\") | [\"$id\", .status, (.runner_name // \"\"), .created_at] | @tsv"
+                     --jq ".jobs[] | select(.name==\"collect\" and .status!=\"completed\") | [\"$id\", .status, ((.runner_name // \"\") | if . == \"\" then \"-\" else . end), .created_at] | @tsv"
                  done)
           echo "${jobs:-no other collect job in progress}"
-          # a collect job that has a machine is real work (e.g. a long backfill): leave everything alone
-          if echo "$jobs" | awk -F'\t' '$3 != ""' | grep -q .; then exit 0; fi
+          # a collect job that has a machine is real work (e.g. a long backfill): leave everything alone.
+          # (no machine is written as "-": an empty tab field would shift the columns for "read")
+          if echo "$jobs" | awk -F'\t' '$3 != "-" && $3 != ""' | grep -q .; then exit 0; fi
           echo "$jobs" | awk -F'\t' '$2=="queued" || $2=="in_progress" || $2=="waiting"' | sort -t$'\t' -k4 | head -1 | \
           while IFS=$'\t' read -r id status runner created; do
             age=$(( now - $(date -d "$created" +%s) ))
