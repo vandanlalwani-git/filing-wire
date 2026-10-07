@@ -524,7 +524,8 @@ def enrich(shown, cache, bse_sess, nse_sess, budget, enabled, log):
             done = entry and (entry["s"] != "fetch_failed" or entry.get("n", 0) >= PDF_MAX_ATTEMPTS)
             # an entry read before events.py existed has no "ev"; read it again
             # once, unless the PDF can never give text
-            if done and want_ev and "ev" not in entry and entry["s"] in ("amount", "pledge", "no_match"):
+            if done and want_ev and entry["s"] in ("amount", "pledge", "no_match") \
+                    and (entry.get("ev") or {}).get("v") != events.RULES_VERSION:
                 done = False
             if done:
                 stats["cache_hits"] += 1
@@ -861,6 +862,8 @@ def colour(rows, days, cache, rcache=None):
             r["dc"] = "neutral" if events.is_pledge_pdf(r) else r["dir"]
         entry = cache.get(cache_key(r)) if r.get("att") else None
         info = (entry or {}).get("ev")
+        if info is not None and info.get("v") != events.RULES_VERSION:
+            info = None                       # read under older rules: read again first
         if info is None and entry and (entry["s"] in ("scanned", "not_pdf", "unreadable")
                                        or (entry["s"] == "fetch_failed"
                                            and entry.get("n", 0) >= PDF_MAX_ATTEMPTS)):
@@ -1040,7 +1043,7 @@ def backfill(data_dir, first, last, log=print, progress="backfill.json"):
 
 
 # ================================================================== repair
-REPAIR_PDF_BUDGET = 900         # PDFs one repair run may read, gently, for rule checks
+REPAIR_PDF_BUDGET = 1100        # PDFs one repair run may read, gently, for rule checks
 
 
 def repair(data_dir, first, last, log=print, fetch=True):
@@ -1077,10 +1080,14 @@ def repair(data_dir, first, last, log=print, fetch=True):
         _pair_inplace(rows)
         mine = [r for r in rows if r["ts"][:10] == d]
         if fetch and read < REPAIR_PDF_BUDGET:
+            def _stale(r):
+                e = cache.get(cache_key(r)) or {}
+                return "ev" in e and e["ev"].get("v") != events.RULES_VERSION
             need = [r for r in mine if not r.get("dup_of") and r.get("att")
-                    and ((r["sev"] >= 2 and events.text_events(r) & events.PDF_CHECK)
-                         or (r["sev"] >= 1 and events.low_sev_pdf(r)))
-                    and "ev" not in (cache.get(cache_key(r)) or {})]
+                    and (_stale(r)                      # read before under older rules
+                         or ("ev" not in (cache.get(cache_key(r)) or {})
+                             and ((r["sev"] >= 2 and events.text_events(r) & events.PDF_CHECK)
+                                  or (r["sev"] >= 1 and events.low_sev_pdf(r)))))]
             if need:
                 if not sess:
                     sess["bse"] = bse_pdf_session()

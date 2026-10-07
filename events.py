@@ -126,6 +126,7 @@ EVENTS = [
             r"amendment\s?(of|in|to)\s?(the |an |existing )?\s?(work\s?order|purchase\s?order|order|contract)|"
             r"(further to|with reference to|in continuation (of|to)) (our|the) (earlier|previous) (intimation|disclosure|letter|communication).{0,300}"
             r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)|"
+            r"commence\w* (of )?(the )?(delivery|supply|supplies|execution|dispatch\w*) (of|against|under) (the )?(order|contract|purchase order|work order)|"
             r"revised (intimation|disclosure)|\(revised\)|extension of (the )?(letter of (award|acceptance|intent)|\bloa\b|contract|work order|order)|revision (in|of|to) (the |our )?(earlier |previous )?(intimation|disclosure|letter)|inadvertent(ly)? (error|typographical)|"
             r"in continuation (of|to) our (earlier |previous )?(intimation|disclosure|letter)[^|]{0,600}(has |have )?(executed|signed|entered into)[^|]{0,60}(agreement|\bppa\b|contract)"),
     dict(id="BID-L1", event="Lowest/highest bidder, not yet awarded", dir=0, dominant=True, where="any",
@@ -138,6 +139,10 @@ EVENTS = [
          rx=r"(framework agreement|potential (export )?suppl|indicative (programme|program|value|ceiling)|memorandum of understanding|\bmou\b)"),
     dict(id="ARBITRATION", event="Arbitration or court outcome, not an order", dir=0, dominant=True, where="any",
          rx=r"\barbitra(l|tion|tor|tors)\b"),
+    dict(id="ORDER-RELATED", event="Order won by a holding, promoter or merging company, not the company or a subsidiary", dir=0, where="text",
+         rx=r"(holding|amalgamating|promoter) ?/? ?(amalgamating )?compan(y|ies)"),
+    dict(id="SAMPLE-ORDER", event="Sample order only", dir=0, where="any",
+         rx=r"sample orders?"),
     dict(id="ORDER-PLACED", event="Company is placing an order with a supplier (it is the buyer)", dir=0, dominant=True, where="any",
          rx=r"(placement of (the |a )?(purchase |work )?orders?,? on|has placed (the )?(following |an? )?(purchase |work )?orders?|approv\w* (for )?(the )?placement of|"
             r"coal linkages?|successful resolution applicant|(letter of intent|loi) for acquiring|for acquiring|"
@@ -176,9 +181,11 @@ EVENTS = [
     dict(id="ORDER-WIN", event="Order or contract win", dir=+1, where="any",
          rx=r"(\border win\b|contract win|(receiv\w*|\bsecur(e|ed|es|ing)\b|\bbag(s|ged)?\b|won|win|award\w*|receipt of|bagging) .{0,80}"
             r"\b(orders?|contracts?|letters? of (award|intent|acceptance)|loa|loi|work orders?|purchase orders?|mandate)\b|"
-            r"letters? of (award|intent|acceptance) .{0,60}\b(from|for|worth|valued|dated)\b|"
+            # who received it must be clear: "letter of award FROM X" (a bare
+            # "letter of award for supply of ..." may be the company buying)
+            r"letters? of (award|intent|acceptance) (received )?from\b|"
             r"has been awarded (a |an |the |two |three |\d+ )?(new |fresh |major |large )?(work |purchase |turnkey |epc )?(contracts?|orders?|work|projects?|letters? of|loa|loi|tenders?|epc|mandate)|has been selected as the successful|renewal of .{0,60}contract.{0,80}increased scope)",
-         block=r"(\b(find|found|is|are|be|in) (it |them |the same )?in (good |proper )?order\b|\bin order to\b|world record|\bexpo\b|awards? (for|of) excellence|\bawards? 20\d\d|awarded (at|in) the [^.]{0,60}awards?\b|award(s)? (ceremony|function)|"
+         block=r"(\b(find|found|is|are|be|in) (it |them |the same )?in (good |proper )?order\b|sample orders?|\bin order to\b|world record|\bexpo\b|awards? (for|of) excellence|\bawards? 20\d\d|awarded (at|in) the [^.]{0,60}awards?\b|award(s)? (ceremony|function)|"
                r"annual general meeting|\bagm\b|\broc\b|penalty|order.in.original|order.in.appeal|\boio\b|assessment (order|year)|appeal|appellate|tribunal|nclt|\bcourt\b|motion|"
                r"sebi (has )?(passed|issued|order)|order (passed|issued) by (the )?(sebi|securities and exchange board)|"
                r"demand|show.?cause|compounding|settlement|adjudicat|commissioner|customs|excise|income.?tax|"
@@ -243,7 +250,7 @@ EVENTS = [
          block=r"(\b(zero|nil|no)\b (form )?(fda )?(483 )?observations?|not related to gmp|non-?gmp|no gmp)"),
     dict(id="TAX-DEMAND", event="Tax / regulatory demand or penalty", dir=-1, where="any",
          rx=r"(show.?cause (cum demand )?notice|\bscn\b|demand (notice|order)|notice of demand|order.in.original|\boio\b|"
-            r"assessment order|drc.?0[17]|\bdemand of (inr|rs\.?|₹)|confirm\w* the demand|demand.{0,40}(confirmed|upheld)|"
+            r"assessment order|drc.?0[17]a?|\bdemand of (inr|rs\.?|₹)|confirm\w* the demand|demand.{0,40}(confirmed|upheld)|"
             r"(dismiss\w*|disallow\w*|reject\w*) the appeal (filed|preferred) by the (company|bank)|"
             r"levy\w* (a )?(penalty|financial disincentive)|penalty (of|amounting|aggregating)|"
             r"(imposed|levied) (a )?(penalty|fine)|(penalty|fine) (has been |was )?(imposed|levied)|"
@@ -368,11 +375,111 @@ JUDGEMENT = {
 #   BUYBACK-NEW   a new buyback approved by the board (daily/progress reports grey)
 #   ID-RESIGN-GOV an independent director resigning over governance concerns
 
+def whole_words(p):
+    """Make every keyword in a pattern match whole words only, so "secur"
+    never matches "securities" and "gst" never matches "amongst": a word
+    boundary goes in front of each alternative that starts a word, and at
+    the end of each alternative that ends one (a plural "s"/"es" is still
+    allowed there). A group glued to a word, like "part(ly|ially)" or
+    "(re)?affirm", is left alone on that side."""
+    n = len(p)
+
+    def word(c):
+        return bool(c) and ((c.isalnum() and c.islower()) or c.isdigit())
+
+    # 1. group structure: for each "(" whether a word runs into it, and for
+    #    each ")" whether a word follows it (after any quantifier)
+    pre, post, match, stack = {}, {}, {}, []
+    i = 0
+    while i < n:
+        c = p[i]
+        if c == "\\":
+            i += 2; continue
+        if c == "[":
+            j = i + 1
+            while j < n and p[j] != "]":
+                j += 2 if p[j] == "\\" else 1
+            i = j + 1; continue
+        if c == "(":
+            prev = p[i - 1] if i else ""
+            esc = i >= 2 and p[i - 2] == "\\"
+            pre[i] = word(prev) or (esc and prev in "wd")
+            stack.append(i)
+        elif c == ")" and stack:
+            o = stack.pop(); match[o] = i
+            j = i + 1
+            while j < n and p[j] in "?*+":
+                j += 1
+            if j < n and p[j] == "{":
+                j = p.index("}", j) + 1
+            post[o] = word(p[j] if j < n else "") or p[j:j + 2] in ("\\w", "\\d")
+        i += 1
+
+    # 2. rewrite
+    out, i, stack = [], 0, [None]          # stack of open "(" indices; None = top level
+    def glued_start():
+        g = stack[-1]
+        return g is not None and pre.get(g)
+    def glued_end():
+        g = stack[-1]
+        return g is not None and post.get(g)
+    def close_alt(k):
+        prev = p[k - 1] if k else ""
+        prev2 = p[k - 2] if k >= 2 else ""
+        prev3 = p[k - 3] if k >= 3 else ""
+        ends = (word(prev) and prev2 != "\\") or (prev == "?" and word(prev2) and prev3 != "\\")
+        if ends and not glued_end():
+            out.append("(?:e?s)?\\b")
+    while i < n:
+        c = p[i]
+        if c == "\\":
+            out.append(p[i:i + 2]); i += 2; continue
+        if c == "[":
+            j = i + 1
+            while j < n and p[j] != "]":
+                j += 2 if p[j] == "\\" else 1
+            out.append(p[i:j + 1]); i = j + 1; continue
+        if c == "(" and p[i + 1:i + 2] == "?" and p[i + 2:i + 3] != ":":
+            j = match.get(i, i) + 1            # lookaround: copy as written
+            out.append(p[i:j]); i = j; continue
+        if c == "|":
+            close_alt(i)
+            out.append("|"); i += 1
+            if word(p[i:i + 1]) and not glued_start():
+                out.append("\\b")
+            continue
+        if c == ")":
+            close_alt(i)
+            out.append(")"); i += 1
+            stack.pop()
+            continue
+        if c == "(":
+            stack.append(i)
+            out.append("("); i += 1
+            if p[i:i + 2] == "?:":
+                out.append("?:"); i += 2
+            if word(p[i:i + 1]) and not glued_start():
+                out.append("\\b")
+            continue
+        out.append(c); i += 1
+    close_alt(n)
+    s2 = "".join(out)
+    if word(p[:1]):
+        s2 = "\\b" + s2
+    return s2
+
+
 _BY_ID = {e["id"]: e for e in EVENTS}
 for e in EVENTS:
-    e["_rx"] = re.compile(e["rx"])
-    e["_block"] = re.compile(e["block"]) if e.get("block") else None
-    e["_need"] = re.compile(e["need"]) if e.get("need") else None
+    e["_rx"] = re.compile(whole_words(e["rx"]))
+    e["_block"] = re.compile(whole_words(e["block"])) if e.get("block") else None
+    e["_need"] = re.compile(whole_words(e["need"])) if e.get("need") else None
+
+# A fingerprint of every pattern: PDF findings saved under older rules are
+# read again (run.py) so a rule fix also reaches PDFs read before it.
+import hashlib as _hashlib
+RULES_VERSION = _hashlib.sha1(repr([(e["id"], e["rx"], e.get("block"), e.get("need"), e.get("window"))
+                                    for e in EVENTS]).encode()).hexdigest()[:10]
 
 WINDOW = 160          # characters either side of a match checked for reversals
 NEED_WINDOW = 400     # context that must contain the authority for TAX-DEMAND
@@ -436,7 +543,8 @@ def _prep(text, row):
 
 ORDER_VETO = {"REG-ORDER", "TAX-DEMAND", "COMPOUNDING", "SEBI-ACTION", "BID-L1", "EMPANEL",
               "ORDER-UPDATE", "COURT-STEP", "NCLT-SCHEME",
-              "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC", "ARBITRATION"}
+              "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC", "ARBITRATION",
+              "SAMPLE-ORDER", "ORDER-RELATED"}
 
 
 def text_hits(row, blocked=None):
@@ -456,11 +564,11 @@ def scan_pdf(row, pdf_text):
     """
     p = _prep(norm(pdf_text or "")[:6000], row)
     if len(p) < 50:
-        return {"hits": [], "blocks": []}
+        return {"hits": [], "blocks": [], "v": RULES_VERSION}
     hits = [{"rule": h["rule"], "phrase": h["phrase"], "lost": h["lost"]}
             for h in _hits(p, "pdf")]
     blocks = [e["id"] for e in EVENTS if e.get("pdf_block") and e["_block"].search(p)]
-    return {"hits": hits, "blocks": blocks}
+    return {"hits": hits, "blocks": blocks, "v": RULES_VERSION}
 
 
 def _expand(h):
@@ -488,7 +596,7 @@ def needs_pdf(row):
 # Filings the exchanges rate routine whose PDF can still change the picture:
 # an independent director's resignation letter may cite governance concerns;
 # a default disclosure may report an actual missed payment.
-LOW_SEV_PDF = {"JC-ID-RESIGN", "DEFAULT-FORM"}
+LOW_SEV_PDF = {"JC-ID-RESIGN", "DEFAULT-FORM"} | PDF_CHECK
 
 
 _DEFAULT_CAT = re.compile(r"default", re.I)
@@ -527,7 +635,7 @@ def decide(row, pdf_text=None, pdf_info=None):
     blocked = set()
     raw = text_hits(row, blocked)
     # not yet checked against its PDF: wait (the next run reads it)
-    if (pdf_info is None and row.get("sev", 0) >= 2 and row.get("att")
+    if (pdf_info is None and row.get("sev", 0) >= 1 and row.get("att")
             and {h["rule"] for h in raw} & PDF_CHECK & LIVE):
         h = [h for h in raw if h["rule"] in PDF_CHECK][0]
         return {"dir": "neutral", "rule": h["rule"], "event": h["event"], "text": h["phrase"],
@@ -572,6 +680,9 @@ LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
         # rare: no wrong colour on any filing available; every firing is logged
         # (rare_rules_log.json) and the rule is switched off if one is wrong
         "BUYBACK-NEW", "ID-RESIGN-GOV",
+        # Order win: 106/110 on fresh August filings; after the whole-word audit
+        # every one of the 250 Sept 1 - Oct 6 greens was read by hand
+        "ORDER-WIN",
         # quarterly results from BSE's figures (results.py): all 128 cases with
         # NSE data agreed; 50 of 50 hand-checked against the filing
         "RESULTS"}
