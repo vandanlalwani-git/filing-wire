@@ -317,6 +317,7 @@ EVENTS = [
     # ------------------------------------------- recognised, not coloured
     dict(id="REG-ORDER", event="Order from a tax or regulatory authority", dir=0, where="any",
          rx=r"(order.in.(original|appeal)|\boio\b|appeal order|assessment order|penalty order|demand order|"
+            r"\bnfac\b|faceless (assessment|appeal)|national e-?assessment|"
             r"compounding order|refund (sanction )?order|"
             r"(orders?|directions?) (dated [\w ,]{0,20})?(passed |issued |received )?(by|from) (the )?(hon'?ble )?([\w&,.()-]+ ){0,5}"
             r"(gst|cgst|sgst|tax|customs|excise|commissioner|tribunal|nclt|nclat|court|sebi|securities and exchange board|"
