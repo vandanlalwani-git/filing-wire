@@ -64,11 +64,17 @@ the rules cannot tell whether news is good or bad, the filing stays
 
 <table>
   <tr>
-    <td width="62%"><img src="docs/images/watchlist-desktop.png" alt="Watchlist tab: each watched company with its filings from the last 30 days"></td>
-    <td width="38%"><img src="docs/images/feed-phone.png" alt="The feed on a phone"></td>
+    <td colspan="2"><img src="docs/images/watchlist-desktop.png" alt="Watchlist tab: each watched company with its filings from the last 30 days"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Watchlist: 30 days of filings per company</sub></td>
+    <td colspan="2" align="center"><sub>Watchlist: each company with its last 30 days of filings</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/images/search.png" alt="Search: filings on the day, and any listed company with a watchlist star" width="380"></td>
+    <td width="50%" align="center"><img src="docs/images/feed-phone.png" alt="The feed on a phone" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Search any listed company</sub></td>
     <td align="center"><sub>Phone layout</sub></td>
   </tr>
 </table>
