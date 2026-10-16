@@ -1,11 +1,13 @@
 """
 Quarterly results, coloured from numbers instead of words. Rules only.
 
-BSE publishes every listed company's results as structured figures (free,
-no key): revenue, net profit and exceptional items for any quarter,
-standalone and consolidated. A results filing is compared with the SAME
-quarter a year earlier, consolidated if both quarters have it, else
-standalone. For consolidated results the profit used is the profit
+BSE publishes listed companies' results as structured figures (free, no
+key): revenue, net profit and exceptional items for any quarter, standalone
+and consolidated. Where BSE has none (NBFCs, AMCs, brokers, insurers, some
+banks) or has not posted them yet, the company's own XBRL filing on NSE is
+used. A results filing is compared with the SAME quarter a year earlier,
+consolidated if both quarters have it (a company that reported consolidated
+figures a year ago is waited for), else standalone. For consolidated results the profit used is the profit
 attributable to owners of the parent, read from the company's own XBRL on
 NSE; when that is not available (BSE-only company, or the figure left
 blank) the total profit is used and the row says so.
@@ -16,7 +18,8 @@ blank) the total profit is used and the row says so.
          bigger loss than a year ago
   GREY   small or mixed changes; a smaller loss (still a loss); a change
          driven mostly (more than half) by exceptional items; no year-ago
-         figures; no revenue; NBFC and insurer formats (not wired in yet)
+         figures; no revenue; life insurers (accounting profit is not the
+         measure); companies with figures on neither BSE nor NSE
 
 The expanded row shows the numbers and which profit and basis were used,
 e.g. "Owners' profit +23% YoY, revenue +11% (consolidated)".
@@ -184,6 +187,161 @@ def fetch(sess, sc, q):
     return "standalone", s, _figures(_std(sess, sc, qly), False)
 
 
+# ---- figures from the company's own XBRL on NSE --------------------------
+# BSE has no structured figures for NBFCs, AMCs, brokers, insurers and some
+# banks, and for other companies its figures can arrive a day late, the
+# standalone ones first. NSE's integrated filing carries the company's own
+# XBRL, both bases, from the moment it files. Each format names its lines
+# differently: (format, revenue, profit for the period, owners' share,
+# exceptional items before tax). The first format whose profit line is
+# present is used.
+XBRL_FORMATS = (
+    ("company", ("RevenueFromOperations",), ("ProfitLossForPeriod",),
+     ("ProfitOrLossAttributableToOwnersOfParent",), ("ExceptionalItemsBeforeTax",)),
+    ("bank", ("InterestEarned",), ("ProfitLossForThePeriod", "ProfitLossFromOrdinaryActivitiesAfterTax"),
+     ("ProfitLossAfterTaxesMinorityInterestAndShareOfProfitLossOfAssociates",), ("ExceptionalItems",)),
+    ("general insurer", ("NetPremiumWritten", "PremiumEarned"), ("ProfitLossAfterTax",), (), ()),
+    ("life insurer", ("NetPremiumIncome",), ("ProfitLossAfterTaxAndExtraordinaryItems",), (), ()),
+)
+_LAST_DAY = {3: 31, 6: 30, 9: 30, 12: 31}
+
+
+def quarter_of(q):
+    """BSE quarter code -> (year, month): 130.00 is June 2026."""
+    months = int(round((float(q) - 130) * 3))
+    t = 2026 * 12 + 5 + months
+    return t // 12, t % 12 + 1
+
+
+def _ctx(text, y, mo):
+    """The XBRL context covering exactly this quarter, with no breakdown."""
+    smo = mo - 2
+    start, end = "%d-%02d-01" % (y, smo), "%d-%02d-%02d" % (y, mo, _LAST_DAY[mo])
+    for cid, body in re.findall(r'<xbrli:context id="([^"]+)">(.*?)</xbrli:context>', text, re.S):
+        if ("<xbrli:startDate>%s<" % start) in body and ("<xbrli:endDate>%s<" % end) in body \
+                and "explicitMember" not in body and "typedMember" not in body:
+            return cid
+    return None
+
+
+def _tag(text, ctx, names):
+    for n in names:
+        m = re.search(r'<in-capmkt:%s\b[^>]*contextRef="%s"[^>]*>([^<]*)<' % (n, re.escape(ctx)), text)
+        v = _num(m.group(1)) if m else None
+        if v is not None:
+            return v / 1e6                           # rupees -> Rs million, as BSE
+    return None
+
+
+def xbrl_figures(text, y, mo, cons):
+    """{end, rev, pat, exc, fmt[, owners]} for the quarter, or None."""
+    ctx = _ctx(text, y, mo)
+    if not ctx:
+        return None
+    for fmt, rev, pat, own, exc in XBRL_FORMATS:
+        p = _tag(text, ctx, pat)
+        if p is None:
+            continue
+        r = _tag(text, ctx, rev)
+        if r is None:
+            return None
+        f = {"end": "%02d-%s-%02d" % (_LAST_DAY[mo], _MON[mo - 1].title(), y % 100),
+             "rev": r, "pat": p, "exc": _tag(text, ctx, exc) if exc else None, "fmt": fmt}
+        o = _tag(text, ctx, own) if (cons and own) else None
+        if o:
+            f["owners"] = o
+        return f
+    return None
+
+
+class NseXbrl:
+    """The company's integrated-filing XBRL on NSE, fetched only when needed."""
+
+    def __init__(self, bse_sess, nse_sess, sc):
+        self.bse, self.nse, self.sc, self._lst, self.isin = bse_sess, nse_sess, sc, None, None
+
+    def _list(self):
+        if self._lst is None:
+            self._lst = []
+            time.sleep(DELAY)
+            meta = self.bse.get(API + "ComHeadernew/w", params={"quotetype": "EQ", "scripcode": self.sc,
+                                                                "seriesid": ""}, timeout=(10, 30)).json()
+            sym, self.isin = (meta.get("SecurityId") or "").strip(), (meta.get("ISIN") or "").strip()
+            if sym:
+                time.sleep(DELAY)
+                self._lst = self.nse.get(NSE_LIST, params={"symbol": sym, "type": "Integrated Filing- Financials"},
+                                         timeout=(10, 30)).json().get("data", [])
+        return self._lst
+
+    def on_nse(self):
+        """False once the company is known to have no NSE filings at all."""
+        return self._lst is None or bool(self._lst)
+
+    def quarter(self, basis, y, mo):
+        qe = "%02d-%s-%d" % (_LAST_DAY[mo], _MON[mo - 1], y)
+        cands = [x for x in self._list() if (x.get("qe_Date") or "").upper() == qe
+                 and x.get("consolidated") == basis and x.get("xbrl")]
+        # a revision corrects the original (seen: an original filed with the
+        # half-year's dates): newest file first, then the older ones
+        cands.sort(key=lambda x: [int(n) for n in re.findall(r"_(\d{6,8})_", x["xbrl"])] or [0], reverse=True)
+        for c in cands[:3]:
+            time.sleep(DELAY)
+            text = self.nse.get(c["xbrl"], timeout=(10, 30)).text
+            i = re.search(r"<in-capmkt:ISIN\b[^>]*>([^<]*)<", text)
+            # same issuer (the first 7 characters): a split or a debt ISIN in an
+            # older file is still the same company
+            if self.isin and i and i.group(1).strip()[:7] != self.isin[:7]:
+                continue                             # another company's file
+            f = xbrl_figures(text, y, mo, basis == "Consolidated")
+            if f:
+                return f
+        return None
+
+    def pair(self, basis, q):
+        y, mo = quarter_of(q)
+        c = self.quarter(basis, y, mo)
+        return (c, self.quarter(basis, y - 1, mo)) if c else (None, None)
+
+
+def lookup(sess, nse_sess, sc, q, wait, x=None):
+    """(basis, current, year_ago, source, still_waiting).
+    Consolidated from BSE, else consolidated from NSE's XBRL; a company that
+    reported consolidated figures a year ago is waited for (while `wait`)
+    rather than judged on standalone figures; then standalone from BSE,
+    else from NSE's XBRL. `x` may be passed in to see afterwards whether the
+    company is on NSE at all (x.on_nse())."""
+    qly = "%.2f" % (float(q) - 4)
+    c = _figures(_con(sess, sc, q), True)
+    cl = _figures(_con(sess, sc, qly), True)
+    if c and cl:
+        if nse_sess is not None:
+            try:            # owners' share of profit, from NSE; total profit if not there
+                c["owners"], cl["owners"] = owners(sess, nse_sess, sc, c["end"], cl["end"])
+            except Exception:
+                pass
+        return "consolidated", c, cl, "bse", False
+    if x is None:              # (x=False: the company is known not to be on NSE)
+        x = NseXbrl(sess, nse_sess, sc) if nse_sess is not None else None
+    xl = None
+    if x:
+        xc, xl = x.pair("Consolidated", q)
+        if xc and xl:
+            return "consolidated", xc, xl, "nse", False
+    if (cl or xl) and wait:
+        return None, None, None, None, True
+    s = _figures(_std(sess, sc, q), False)
+    sl = _figures(_std(sess, sc, qly), False) if s else None
+    if s and sl:
+        return "standalone", s, sl, "bse", False
+    if x:
+        xs, xsl = x.pair("Standalone", q)
+        if xs and xsl:
+            return "standalone", xs, xsl, "nse", False
+    if s:
+        return "standalone", s, None, "bse", False
+    return None, None, None, None, False
+
+
 def _pct(a, b):
     return None if b in (None, 0) or a is None else (a - b) / abs(b) * 100
 
@@ -231,6 +389,10 @@ def judge(basis, cur, ly):
     if not cur:
         return {"dir": "neutral", "text": None,
                 "reason": "no structured figures for this filing (yet), or a company type not wired in"}
+    if cur.get("fmt") == "life insurer":
+        return {"dir": "neutral", "text": None,
+                "reason": "life insurer: accounting profit does not show how the business is doing "
+                          "(value of new business does), so it is not coloured"}
     if not ly or not _year_ago(cur, ly):
         return {"dir": "neutral", "text": None, "reason": "no figures for the same quarter last year"}
     if cur.get("owners") is None or ly.get("owners") is None:     # like for like

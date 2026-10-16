@@ -686,10 +686,14 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     full = kind in ("full", "backfill")
     log("%s run at %s IST for %s" % (kind.upper(), now_s, ", ".join(days)))
 
-    # 1. record book for these days, plus the day before as pairing context
+    # 1. record book for these days, plus the day before as pairing context,
+    #    plus any recent day with a results filing still waiting for figures
     context_day = (datetime.strptime(days[0], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    rcache = _read(os.path.join(data_dir, RESULTS_CACHE), {})
+    reopen = [] if backfill_days else [d for d in reopen_results(rcache, now.strftime("%Y-%m-%d"))
+                                       if d not in days]
     book = {}
-    for d in [context_day] + days:
+    for d in sorted(set([context_day] + days + reopen)):
         for r in load_day(data_dir, d):
             book[r["id"]] = r
     known = set(book)
@@ -718,7 +722,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     ex["NSE"] = nse_info
 
     # 3. union with the book; nothing is ever dropped. First sighting is kept.
-    loaded = {context_day} | set(days)
+    loaded = {context_day} | set(days) | set(reopen)
     new_ids = []
     for r in fetched:
         d = r["ts"][:10]
@@ -737,7 +741,7 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
             new_ids.append(r["id"])
         book[r["id"]] = r                       # fresh classification wins
     # write the days this run covers, plus any day that gained a filing
-    touched = set(days) | {book[i]["ts"][:10] for i in new_ids}
+    touched = set(days) | set(reopen) | {book[i]["ts"][:10] for i in new_ids}
 
     # 4. pair duplicates, one-to-one, over everything loaded
     rows = list(book.values())
@@ -748,7 +752,6 @@ def run(data_dir, mode="auto", backfill_days=None, enrich_on=True, now=None,
     shown = [r for r in rows if not r.get("dup_of") and r["ts"][:10] in touched]
     pdf = enrich(shown, cache, bse_sess, nse_sess or bse_sess, max_pdfs, enrich_on, log)
     reapply_cached(rows, touched, cache)
-    rcache = _read(os.path.join(data_dir, RESULTS_CACHE), {})
     if enrich_on and "RESULTS" in events.LIVE:
         results_stage(shown, rcache, bse_sess, nse_sess, now, log)
     colour(rows, touched, cache, rcache)
@@ -901,8 +904,11 @@ def colour(rows, days, cache, rcache=None):
 RESULTS_CACHE = "results_cache.json"
 RESULTS_PER_RUN = 40            # results filings looked up per run
 RESULTS_STAGE_LIMIT = 90        # seconds of results lookups per run
-RESULTS_RETRY_MIN = 20          # minutes between tries while BSE has no figures yet
-RESULTS_MAX_TRIES = 12
+RESULTS_RETRY_MIN = 20          # minutes between tries while no figures are out yet,
+RESULTS_RETRY_LATE_MIN = 120    # ... and after the first RESULTS_CON_WAIT tries
+RESULTS_CON_WAIT = 12           # tries (about 4 hours) waiting for consolidated figures
+RESULTS_MAX_TRIES = 36          # BSE can take a day or two: about 52 hours in all
+RESULTS_V = 2                   # lookups before v2 (BSE only, 4 hours) are looked up again once
 
 
 def _rkey(r):
@@ -910,38 +916,60 @@ def _rkey(r):
     return "%s|%s" % (r.get("sc"), results.qcode(y, mo))
 
 
+def reopen_results(rcache, today):
+    """One time: results looked up by the old rules (BSE only, gave up after 4
+    hours, settled for standalone) are looked up again. Returns the past days
+    that hold a result still waiting for figures."""
+    cutoff = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=10)).strftime("%Y-%m-%d")
+    for e in rcache.values():
+        if e.get("v") != RESULTS_V and e.get("final") and e.get("d", "") >= cutoff \
+                and (not e.get("c") or e.get("b") == "standalone"):
+            if e.get("c"):           # shown as before until the new lookup settles
+                e["prev"] = {"b": e.get("b"), "c": e.get("c"), "l": e.get("l")}
+            e.update(final=False, n=0, t=None, v=RESULTS_V)
+    return sorted({e["d"] for e in rcache.values()
+                   if not e.get("final") and cutoff <= e.get("d", "") < today})
+
+
 def results_stage(shown, rcache, sess, nse_sess, now, log):
-    """Look up structured figures for new results filings (BSE's own data,
-    current quarter and the same quarter a year earlier). Figures that are
-    not out yet are tried again later, up to RESULTS_MAX_TRIES times."""
+    """Look up figures for results filings: BSE's structured figures, else the
+    company's own XBRL on NSE (results.lookup), this quarter and the same
+    quarter a year earlier. Figures that are not out yet are tried again
+    later, up to RESULTS_MAX_TRIES times."""
     t0, done, found = time.time(), 0, 0
     sess.headers.setdefault("Referer", "https://www.bseindia.com/")
-    for r in shown:
-        if not results.is_result(r) or r["sev"] < 2 or not r.get("sc"):
-            continue
+    # results never looked up first, newest first; then the ones still waiting
+    todo = sorted((r for r in shown if results.is_result(r) and r["sev"] >= 2 and r.get("sc")),
+                  key=lambda r: r["ts"], reverse=True)
+    todo.sort(key=lambda r: (rcache.get(_rkey(r)) or {}).get("n", 0) > 0)       # stable
+    for r in todo:
         k = _rkey(r)
         e = rcache.get(k) or {}
         if e.get("final") and (not e.get("c") or "exc" in e["c"]):
             continue                              # (looked up before exceptional items were kept: again)
-        last = e.get("t")
-        if last and (now - datetime.strptime(last, TS).replace(tzinfo=IST)).total_seconds() < RESULTS_RETRY_MIN * 60:
+        last, n = e.get("t"), e.get("n", 0)
+        gap = RESULTS_RETRY_MIN if n < RESULTS_CON_WAIT else RESULTS_RETRY_LATE_MIN
+        if last and (now - datetime.strptime(last, TS).replace(tzinfo=IST)).total_seconds() < gap * 60:
             continue
         if done >= RESULTS_PER_RUN or time.time() - t0 > RESULTS_STAGE_LIMIT:
             break
         done += 1
+        x = False if e.get("no_nse") or nse_sess is None else results.NseXbrl(sess, nse_sess, r["sc"])
         try:
-            basis, cur, ly = results.fetch(sess, r["sc"], k.split("|")[1])
-            if basis == "consolidated" and cur and ly and nse_sess is not None:
-                try:            # owners' share of profit, from NSE; total profit if not there
-                    cur["owners"], ly["owners"] = results.owners(sess, nse_sess, r["sc"], cur["end"], ly["end"])
-                except Exception:
-                    pass
+            basis, cur, ly, src, waiting = results.lookup(sess, nse_sess, r["sc"], k.split("|")[1],
+                                                          n + 1 < RESULTS_CON_WAIT, x)
         except Exception as ex:                       # network trouble: try later
-            rcache[k] = dict(e, t=now.strftime(TS), n=e.get("n", 0) + 1, err=type(ex).__name__)
+            rcache[k] = dict(e, t=now.strftime(TS), n=n + 1, err=type(ex).__name__, d=r["ts"][:10],
+                             v=RESULTS_V)
             continue
-        n = e.get("n", 0) + 1
-        rcache[k] = {"b": basis, "c": cur, "l": ly, "t": now.strftime(TS), "n": n,
-                     "d": r["ts"][:10], "final": bool(cur) or n >= RESULTS_MAX_TRIES}
+        n += 1
+        rcache[k] = {"b": basis, "c": cur, "l": ly, "src": src, "t": now.strftime(TS), "n": n,
+                     "d": r["ts"][:10], "v": RESULTS_V,
+                     "final": not waiting and (bool(cur) or n >= RESULTS_MAX_TRIES)}
+        if not rcache[k]["final"] and e.get("prev"):
+            rcache[k]["prev"] = e["prev"]
+        if e.get("no_nse") or (x and not x.on_nse()):
+            rcache[k]["no_nse"] = True            # BSE only: no need to ask NSE again
         found += bool(cur)
     if done:
         log("  results: %d looked up, %d with figures" % (done, found))
@@ -953,6 +981,13 @@ def result_outcome(r, rcache):
     if not rcache or not results.is_result(r) or not r.get("sc"):
         return None
     e = rcache.get(_rkey(r))
+    if e and not e.get("final") and e.get("prev"):
+        e = dict(e["prev"], final=True)          # being looked up again: keep what was shown
+    if e and not e.get("final") and e.get("n", 0) > 0:
+        # the figures decide a results filing; its words (often a scanned
+        # statement read badly) do not colour it while they are awaited
+        return {"dir": "neutral", "rule": "RESULTS", "event": results.EVENT, "text": None,
+                "reason": "%s: waiting for the figures" % results.EVENT, "by": "data"}
     if not e or not e.get("final"):
         return None
     j = results.judge(e.get("b"), e.get("c"), e.get("l"))

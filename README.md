@@ -186,7 +186,7 @@ All sources are free and public, and none needs a key or login.
 | NSE corporate announcements | Filings, categories, attachments |
 | Filing PDFs on BSE / NSE | Order wins, pledges, commissioning and other events the text alone can't settle |
 | BSE structured financial results | Revenue, profit and exceptional items for quarterly results |
-| NSE integrated filing XBRL | Profit attributable to owners of the parent |
+| NSE integrated filing XBRL | Profit attributable to owners of the parent; full results figures for NBFCs, banks and general insurers, and whenever BSE's figures are late |
 | NSE `EQUITY_L.csv` and `SME_EQUITY_L.csv`; BSE list of scrips (active and suspended) | Company directory, refreshed daily |
 
 Requests are paced (at least 0.5 s between BSE pages), and every request has
@@ -270,8 +270,9 @@ result with the figures behind it, for checking by hand against the filings.
 
 - **Fixed rules can be wrong.** They are deliberately cautious, so most
   filings stay Unclassified.
-- **NBFC and insurer results** use formats that BSE's structured figures do
-  not cover yet, so these results stay Unclassified.
+- **Results without figures stay Unclassified**: life insurers (accounting
+  profit is not the measure), and NBFCs listed only on BSE (no structured
+  figures are published for them).
 - **Timing.** It depends on GitHub's free runners and on the exchanges'
   public endpoints. A delay is shown on the page, never hidden.
 - **Retention.** History is kept for 90 days.
