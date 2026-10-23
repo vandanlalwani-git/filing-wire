@@ -308,7 +308,7 @@ EVENTS = [
                r"committee of creditors|\bcoc\b|meeting|financial results|quarter|resolution plan)"),
     dict(id="FRAUD", event="Fraud / investigation", dir=-1, where="any",
          rx=r"(cyber fraud|fraud(ulent)? (incident|transactions?|payments?)|fraud .{0,40}(detected|identified|committed)|"
-            r"serious fraud investigation office|\bsfio\b|forensic audit .{0,40}(initiated|ordered|appointed))",
+            r"serious fraud investigation office|\bsfio\b.{0,60}(investigat\w*|inquir\w*|enquir\w*|notices?|summons|search\w*)|(investigat\w*|inquir\w*|enquir\w*|notices?|summons)\b.{0,60}\bsfio\b|forensic audit .{0,40}(initiated|ordered|appointed))",
          block=r"(fraudulent borrower|wilful defaulter or a fraudulent|writ petition)"),
     dict(id="PLEDGE-NEW", event="Pledge created / invoked", dir=-1, where="any",
          rx=r"creation of (the )?(pledge|encumbrance)|pledge (created|invoked)|invocation of (the )?(pledge|encumbrance)",
