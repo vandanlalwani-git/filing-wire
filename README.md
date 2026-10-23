@@ -86,7 +86,10 @@ The decision is made in three layers, from the broadest to the most specific.
 1. **Weight (severity).** This comes from the category the company filed
    under on each exchange, mapped in [`taxonomy.json`](taxonomy.json) and
    [`taxonomy_nse.json`](taxonomy_nse.json). Some headline phrases override
-   the category.
+   the category. Filings that carry no company news are weighted down: an
+   exchange's price or volume query (unless it is about a news story) and
+   creditors' committee meeting notices are Notable, not Critical; "no
+   deviation" statements and daily buyback reports are Routine.
 2. **Direction (colour).** Phrase rules in [`events.py`](events.py) read the
    filing's own text and, where text alone is not enough, its PDF. Keywords
    match whole words or exact phrases only. Blocking phrases stop known false
@@ -116,11 +119,11 @@ which figure and basis applied.
 
 ### Which rules colour the feed
 
-Twelve rules can colour a filing: the ten event rules below, a PDF check for
-pledges, and the results rule. Each was switched on only after a blind test,
-scoring at least 95% right on fresh filings that were labelled by hand
-before the rule was run on them. The other 43 event rules still name the
-event, but leave it Unclassified.
+Eighteen rules can colour a filing: the sixteen event rules below, a PDF
+check for pledges, and the results rule. The common ones were switched on
+only after a blind test, scoring at least 95% right on fresh filings that
+were labelled by hand before the rule was run on them. The other 37 event
+rules still name the event, but leave it Unclassified.
 
 | Favourable | Adverse |
 |---|---|
@@ -129,12 +132,18 @@ event, but leave it Unclassified.
 | Plant commissioned or production started | Fire or accident at a facility |
 | Pledge released | Pledge created or invoked |
 | New buyback approved by the board ¹ | Independent director resigned citing governance concerns ¹ |
+| USFDA approval or clean inspection ¹ ² | Credit rating downgraded ¹ |
+| Tax or court ruling in the company's favour ¹ ² | Search or raid by tax, ED or SEBI ¹ |
+| | Fraud or SFIO investigation ¹ |
+| | Default on interest or principal ¹ |
 | Quarterly results (by the figures) | Quarterly results (by the figures) |
 
 ¹ *Rare events.* These are too rare for a full blind test. They were
 switched on after giving no wrong colour on every filing available. Every
 time one of them colours a filing, it is logged to `rare_rules_log.json` for
 review, and the rule is switched off if it is ever wrong.
+² Coloured only when the filing's own headline or text says so, not from
+its PDF alone.
 
 The hand-labelled test set (463 filings) and its labelling conventions are
 in [`tests/`](tests/); see [`tests/LABELLING.md`](tests/LABELLING.md).
@@ -262,7 +271,7 @@ If the workflow is enabled but the site is still stale, open the newest run
 in the list (it will have a red mark) to see the error. The site keeps
 showing the last good data in the meantime.
 
-**Results-season review.** From 7 to 21 October 2026, the collector writes
+**Results-season review.** From 7 October to 15 November 2026, the collector writes
 `reviews/results-<day>.md` on the `data` branch. It lists every coloured
 result with the figures behind it, for checking by hand against the filings.
 

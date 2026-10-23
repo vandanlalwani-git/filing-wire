@@ -597,7 +597,7 @@ def _write(path, obj):
 #                    what later runs need (matching key, ISIN, subcategory,
 #                    attachment, first-seen time, which run found it)
 #   days/<day>.json  what the screen reads: shown filings only, v5's fields
-BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "sc", "isin", "sec", "sev", "sev0", "dir", "dc", "lab",
+BOOK_FIELDS = ("id", "src", "ts", "co", "ck", "sc", "isin", "sec", "sev", "sev0", "sevc", "dir", "dc", "lab",
                "line", "amt", "sub", "att", "fs", "by", "hl", "subj", "cat", "why")
 SCREEN_FIELDS = ("id", "t", "ts", "co", "sec", "sev", "dir", "lab", "line")
 
@@ -864,6 +864,10 @@ def colour(rows, days, cache, rcache=None):
     index = {r["id"]: r for r in rows}
     mine = [r for r in rows if r["ts"][:10] in days]
     for r in mine:
+        # "sevc" keeps the weight the exchange's category gave; the rules
+        # always start from it, so re-colouring gives the same answer
+        r["sev"] = r.setdefault("sevc", r.get("sev0", r["sev"]))
+        r.pop("sev0", None)
         if "dc" not in r:                     # filed before events.py existed
             r["dc"] = "neutral" if events.is_pledge_pdf(r) else r["dir"]
         entry = cache.get(cache_key(r)) if r.get("att") else None
@@ -879,14 +883,14 @@ def colour(rows, days, cache, rcache=None):
         if res is not None:
             out = res
         r["dir"], r["why"] = out["dir"], _why(out)
-        # a routine-looking filing the rules colour (an independent director
-        # resigning over governance concerns) is shown as Notable; "sev0"
-        # keeps the exchange-category severity so re-colouring can undo it
-        if out["dir"] != "neutral" and r["sev"] < 2:
-            r.setdefault("sev0", r["sev"])
-            r["sev"] = 2
-        elif "sev0" in r and out["dir"] == "neutral":
-            r["sev"] = r.pop("sev0")
+        # weight: the category's, adjusted by events.weight(); a routine-looking
+        # filing the rules colour (an independent director resigning over
+        # governance concerns) is shown as Notable, "sev0" keeping its own weight
+        base = events.weight(r, r["sevc"])
+        if out["dir"] != "neutral" and base < 2:
+            r["sev0"], r["sev"] = base, 2
+        else:
+            r["sev"] = base
         lab = events.better_label(r, out.get("rules") or [])
         if lab:
             if r.get("line", "").startswith(r["lab"]):
@@ -998,11 +1002,11 @@ def result_outcome(r, rcache):
     return out
 
 
-# For two weeks of the results season, a file per day on the data branch
+# For the results season (7 Oct - 15 Nov), a file per day on the data branch
 # (reviews/results-<day>.md) lists every result the numbers coloured, with
 # the figures behind it, for checking by hand against the filings.
 REVIEW_DIR = "reviews"
-REVIEW_FROM, REVIEW_TO = "2026-10-07", "2026-10-21"
+REVIEW_FROM, REVIEW_TO = "2026-10-07", "2026-11-15"
 _COLOUR = {"positive": "GREEN", "negative": "RED", "neutral": "grey"}
 
 

@@ -122,7 +122,7 @@ EVENTS = [
     dict(id="DEBT-SUSP", event="Debt security suspended on maturity", dir=0, dominant=True, where="text",
          rx=r"(debentures?|ncds?|ccds?|bonds?|commercial papers?).{0,200}suspended.{0,80}on account of (maturity|conversion|redemption)"),
     dict(id="ORDER-UPDATE", event="Update on an order already disclosed", dir=0, dominant=True, where="any",
-         rx=r"(update|status) on (the )?order execution|order execution (update|status)|"
+         rx=r"\bupdate (of|on) (the )?(award|orders?|contracts?|work orders?|loa|letter of award)\b|(update|status) on (the )?order execution|order execution (update|status)|"
             r"amendment\s?(of|in|to)\s?(the |an |existing )?\s?(work\s?order|purchase\s?order|order|contract)|"
             r"(further to|with reference to|in continuation (of|to)) (our|the) (earlier|previous) (intimation|disclosure|letter|communication).{0,300}"
             r"\b(loa|letter of (acceptance|award|intent))\b.{0,300}(contract agreement|entered into|signed|executed)|"
@@ -177,15 +177,15 @@ EVENTS = [
          rx=r"(ratings?|outlook)\b.{0,80}\bupgrad\w+|\bupgrad\w+ .{0,80}\b(ratings?|outlook)\b|outlook (has been )?(revised|changed|improved) (from \W?\w+\W? )?to \W?positive|"
             r"outlook (has been )?(revised|changed|improved) from \W?negative\W? to \W?stable|(revis\w+|chang\w+|improv\w+) (the )?outlook .{0,25}from \W?negative\W? to \W?(stable|positive)|\w+/positive.{0,40}outlook revised from \W?stable",
          # a form whose column lists the options "new/ upgrade/ downgrade/ reaffirm"
-         block=r"(new|positive|negative|stable|assigned|reaffirm\w*|downgrade|withdraw\w*)\s?/\s?(upgrad|downgrad)|upgrad\w*\s?/\s?(downgrad|rating|reaffirm|withdraw|other)", window=40),
+         block=r"\b(in case|if|in the event|should|whenever)\b.{0,40}\b(ratings?|upgrad\w*)\b|(new|positive|negative|stable|assigned|reaffirm\w*|downgrade|withdraw\w*)\s?/\s?(upgrad|downgrad)|upgrad\w*\s?/\s?(downgrad|rating|reaffirm|withdraw|other)", window=40),
     dict(id="ORDER-WIN", event="Order or contract win", dir=+1, where="any",
-         rx=r"(\border win\b|contract win|(receiv\w*|\bsecur(e|ed|es|ing)\b|\bbag(s|ged)?\b|won|win|award\w*|receipt of|bagging) .{0,80}"
+         rx=r"(\border win\b|contract win|(\breceiv(e|ed|es|ing)\b|\bsecur(e|ed|es|ing)\b|\bbag(s|ged)?\b|won|win|award\w*|receipt of|bagging) .{0,80}"
             r"\b(orders?|contracts?|letters? of (award|intent|acceptance)|loa|loi|work orders?|purchase orders?|mandate)\b|"
             # who received it must be clear: "letter of award FROM X" (a bare
             # "letter of award for supply of ..." may be the company buying)
             r"letters? of (award|intent|acceptance) (received )?from\b|"
             r"has been awarded (a |an |the |two |three |\d+ )?(new |fresh |major |large )?(work |purchase |turnkey |epc )?(contracts?|orders?|work|projects?|letters? of|loa|loi|tenders?|epc|mandate)|has been selected as the successful|renewal of .{0,60}contract.{0,80}increased scope)",
-         block=r"(\b(find|found|is|are|be|in) (it |them |the same )?in (good |proper )?order\b|sample orders?|\bin order to\b|world record|\bexpo\b|awards? (for|of) excellence|\bawards? 20\d\d|awarded (at|in) the [^.]{0,60}awards?\b|award(s)? (ceremony|function)|"
+         block=r"(\b(find|found|is|are|be|in) (it |them |the same )?in (good |proper )?order\b|(it|them|this|same|above) in (good |proper )?order\b|exemption order|sebi\W.{0,40}\border|consumer (disputes|forum|commission|court)|redressal|enforcement directorate|seizure|(provisional )?attachment order|order of attachment|labour (court|commissioner)|(earlier|previous) (announcements?|intimations?|disclosures?|letters?)[^.]{0,120}\b(wherein|in which) (we|the company) (had )?(informed|intimated)|(revised|additional|further) scope|(under|in) (the )?existing contract|sample orders?|\bin order to\b|world record|\bexpo\b|awards? (for|of) excellence|\bawards? 20\d\d|awarded (at|in) the [^.]{0,60}awards?\b|award(s)? (ceremony|function)|"
                r"annual general meeting|\bagm\b|\broc\b|penalty|order.in.original|order.in.appeal|\boio\b|assessment (order|year)|appeal|appellate|tribunal|nclt|\bcourt\b|motion|"
                r"sebi (has )?(passed|issued|order)|order (passed|issued) by (the )?(sebi|securities and exchange board)|"
                r"demand|show.?cause|compounding|settlement|adjudicat|commissioner|customs|excise|income.?tax|"
@@ -203,7 +203,7 @@ EVENTS = [
             r"(capacity expansion|expansion (project|programme|program)|phase).{0,60}(completed|commissioned)|"
             r"inaugurat\w* .{0,60}(facility|plant|unit)|capacity (has been )?(enhanced|added) to|"
             r"operations .{0,120}restored to (their )?regular)",
-         block=r"(for (its |our )?(reputed )?clients|executed for|on behalf of|proposed|expected to be|will be commissioned|scheduled|"
+         block=r"(target entity|name of the target|acquir\w* (\w+ ){0,3}shares|captive (power|consumer|user)|for (its |our )?(reputed )?clients|executed for|on behalf of|proposed|expected to be|will be commissioned|scheduled|"
                r"postpon\w*|delay\w*|deferr?\w*|pilot plant|(retail|multi.?brand|new) (store|showroom)s?|"
                r"on (an )?epc basis|being executed by|epc (contract|contractor)|commissioning certificate|"
                r"\b(for|at) ([a-z&.]+ ){1,4}(private )?(limited|ltd)\b)", window=300),
@@ -268,7 +268,7 @@ EVENTS = [
          rx=r"(\b(search|seizure|raid|survey) (and seizure )?(operations?|proceedings?|action)?.{0,80}"
             r"(enforcement directorate|\bed\b|income.?tax|gst|sebi|cbi|dggi|directorate)|"
             r"(enforcement directorate|\bed\b|sebi|gst|income.?tax|dggi|cbi).{0,80}(conducted|initiated|carried out) (a )?\b(search|raid|survey))",
-         block=r"(concluded|completed).{0,300}(no (material )?(impact|liability)|input tax credit|eligible to avail)|"
+         block=r"rated entity|latest rating|(concluded|completed).{0,300}(no (material )?(impact|liability)|input tax credit|eligible to avail)|"
                r"(no (material )?(impact|liability)|input tax credit|eligible to avail).{0,300}(concluded|completed)", pdf_block=True, window=400),
     dict(id="DEFAULT", event="Default on interest / principal", dir=-1, where="any",
          # an actual event only: "has defaulted on", "delay in payment of
@@ -299,7 +299,7 @@ EVENTS = [
          rx=r"((has been|have been|was|were|is|are|stands?) downgraded|downgraded (to|from)|downgrade of (the )?(long|short|rating)|"
             r"(placed|put|kept|retained) (on|under) (credit |rating )?watch with negative|rating watch (with )?negative|"
             r"outlook (has been |was )?(revised|changed) (from \W?\w+\W? )?to \W?negative)",
-         block=r"((could|may|would|might|will|can) (lead|trigger|result|warrant|prompt|also)|sensitivit\w*|factors|in case of|if the|"
+         block=r"(continues? to be|remains? (on|under)|retained|\bkept\b|assigned|reaffirm\w*|(could|may|would|might|will|can) (lead|trigger|result|warrant|prompt|also)|sensitivit\w*|factors|in case of|if the|"
                r"downgrade (trigger|factor)|definition|rating scale)", window=120),
     dict(id="INSOLV-ADMIT", event="Insolvency petition admitted / CIRP started", dir=0, where="any",
          rx=r"(admit\w* .{0,120}(insolvency|section [79]\b|cirp)|(initiat\w*|commence\w*) (of )?(the )?(corporate insolvency resolution process|cirp)\b.{0,60}(against|of) the company|"
@@ -542,6 +542,12 @@ def _prep(text, row):
     return t.replace(co, " ") if co else t
 
 
+# The exchanges' categories for a communication from a regulator, court or
+# authority (Reg 30(13)) and for litigation: an "order" filed under these is
+# never a commercial order (seen: EPFO, consumer court, ED seizure).
+REGULATOR_CATEGORY = re.compile(r"action\(s\) (taken|initiated)|orders? passed|pendency of litigation|"
+                                r"delay/default in (the )?payment of fines", re.I)
+
 ORDER_VETO = {"REG-ORDER", "TAX-DEMAND", "COMPOUNDING", "SEBI-ACTION", "BID-L1", "EMPANEL",
               "ORDER-UPDATE", "COURT-STEP", "NCLT-SCHEME",
               "ORDER-PLACED", "ORDER-CANCEL", "ORDER-ASSOC", "ARBITRATION",
@@ -645,7 +651,8 @@ def decide(row, pdf_text=None, pdf_info=None):
     # a headline "order" the PDF shows to be a regulator's order, a bid status,
     # an empanelment or a follow-up to an order already disclosed is not a win
     pdf_rules = {h["rule"] for h in (pdf_info or {}).get("hits") or []}
-    order_veto = bool((pdf_rules | {h["rule"] for h in raw}) & ORDER_VETO)
+    order_veto = bool((pdf_rules | {h["rule"] for h in raw}) & ORDER_VETO) \
+        or bool(REGULATOR_CATEGORY.search(row.get("sub") or ""))
     if order_veto:
         raw = [h for h in raw if h["rule"] != "ORDER-WIN"]
     # a headline event whose outcome the PDF qualifies is dropped
@@ -670,6 +677,39 @@ def decide(row, pdf_text=None, pdf_info=None):
     return out
 
 
+# ------------------------------------------------------------------ weight
+# The exchanges' categories set the weight (Critical / Notable / Routine).
+# These groups carry no news of their own and are weighted down (owner's
+# decision, 21 Oct 2026; counts are 1 Sept - 16 Oct):
+#   an exchange's price / volume query, or the reply   Critical -> Notable
+#     (704 rows, 29% of Critical; a query about a news story stays Critical)
+#   a creditors' committee meeting notice              Critical -> Notable (37)
+#   a statement of deviation / monitoring agency report Notable -> Routine (57)
+#     (unless it reports an actual deviation)
+#   a daily buyback progress report                    Notable -> Routine (108)
+_QUERY_LABELS = {"Exchange sought clarification", "Exchange queried price movement",
+                 "Exchange queried volume spurt"}
+_NEWS = re.compile(r"\b(news|media|article|report(ed|s)? (in|on|by)|rumou?r)", re.I)
+_ACTUAL_DEVIATION = re.compile(r"(there (is|has been|was) (a )?(deviation|variation)|deviation of rs|"
+                               r"deviations? (were |was |has been )?(observed|reported|noticed))", re.I)
+_NO_DEVIATION = re.compile(r"\b(no|nil|not any|not)\b.{0,15}(deviation|variation)", re.I)
+
+
+def weight(row, sev):
+    """The weight shown for a filing whose exchange category gave `sev`."""
+    lab = row.get("lab") or ""
+    if lab in _QUERY_LABELS and sev == 3:
+        return 3 if _NEWS.search((row.get("hl") or "") + " " + (row.get("subj") or "")) else 2
+    if lab == "Creditors committee meeting called" and sev == 3:
+        return 2
+    if lab in ("Deviation in fund use", "Monitoring agency report") and sev == 2:
+        t = filing_text(row)
+        return 2 if (_ACTUAL_DEVIATION.search(t) and not _NO_DEVIATION.search(t)) else 1
+    if lab == "Buyback in progress" and sev == 2:
+        return 1
+    return sev
+
+
 # Rules allowed to colour a row. Every other rule still names the event and
 # still counts towards "conflicting signals", but leaves the row grey until it
 # passes its own blind test (at least 95% right on fresh filings).
@@ -686,8 +726,14 @@ LIVE = {"AUD-RESIGN", "RATING-UP", "TAX-DEMAND", "FIRE",
         "ORDER-WIN",
         # quarterly results from BSE's figures (results.py): all 128 cases with
         # NSE data agreed; 50 of 50 hand-checked against the filing
-        "RESULTS"}
-RARE = {"BUYBACK-NEW", "ID-RESIGN-GOV"}
+        "RESULTS",
+        # rare (21 Oct 2026, owner's decision): right on every filing since
+        # 1 Sept once fixed, too few for a full blind test; every firing is
+        # logged and the rule is switched off if one is wrong. The drug-regulator
+        # and ruling rules colour from the filing's own text only (TEXT_ONLY).
+        "RATING-DOWN", "SEARCH", "FRAUD", "DEFAULT", "DRUG-OK", "RULING-FAV"}
+RARE = {"BUYBACK-NEW", "ID-RESIGN-GOV",
+        "RATING-DOWN", "SEARCH", "FRAUD", "DEFAULT", "DRUG-OK", "RULING-FAV"}
 
 # Labels the exchanges' categories gave that the filing's own text contradicts.
 # The row keeps its category in "sub"/"cat"; only the tag shown changes.
@@ -717,11 +763,22 @@ def better_label(row, rules):
     return None
 
 
+# Rules that colour a filing only when its own headline / text says so: their
+# matches in PDFs were too often something else (a credit rating "reduced from
+# Rs", "NAI" in a rating letter). PDF matches still count as a signal, so a
+# ruling in the company's favour still cancels the demand it names.
+TEXT_ONLY = {"DRUG-OK", "RULING-FAV"}
+
+
 def _gate(out):
     """Stage switch: a rule not yet proven leaves the row grey, saying so."""
     if out["dir"] != "neutral" and out["rule"] not in LIVE:
         return dict(out, dir="neutral",
                     reason="%s: not coloured yet - this rule is still being tested" % out["event"])
+    if out["dir"] != "neutral" and out["rule"] in TEXT_ONLY and out.get("by") == "pdf":
+        return dict(out, dir="neutral",
+                    reason="%s: only the PDF says so - coloured only when the filing's own text does"
+                    % out["event"])
     return out
 
 
