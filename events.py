@@ -299,7 +299,7 @@ EVENTS = [
          rx=r"((has been|have been|was|were|is|are|stands?) downgraded|downgraded (to|from)|downgrade of (the )?(long|short|rating)|"
             r"(placed|put|kept|retained) (on|under) (credit |rating )?watch with negative|rating watch (with )?negative|"
             r"outlook (has been |was )?(revised|changed) (from \W?\w+\W? )?to \W?negative)",
-         block=r"(continues? to be|remains? (on|under)|retained|\bkept\b|assigned|reaffirm\w*|(could|may|would|might|will|can) (lead|trigger|result|warrant|prompt|also)|sensitivit\w*|factors|in case of|if the|"
+         block=r"(continues? (to be|to remain|on|under)|remains? (on|under)|retained|\bkept\b|assigned|reaffirm\w*|(could|may|would|might|will|can) (lead|trigger|result|warrant|prompt|also)|sensitivit\w*|factors|in case of|if the|"
                r"downgrade (trigger|factor)|definition|rating scale)", window=120),
     dict(id="INSOLV-ADMIT", event="Insolvency petition admitted / CIRP started", dir=0, where="any",
          rx=r"(admit\w* .{0,120}(insolvency|section [79]\b|cirp)|(initiat\w*|commence\w*) (of )?(the )?(corporate insolvency resolution process|cirp)\b.{0,60}(against|of) the company|"
@@ -587,7 +587,7 @@ def _expand(h):
 # Rules whose headline match is confirmed against the PDF before colouring:
 # the PDF may show the "order" is the company's own purchase, a cancellation,
 # an associate's win, an arbitration, a bid status or a follow-up.
-PDF_CHECK = {"ORDER-WIN"}
+PDF_CHECK = {"ORDER-WIN", "SEARCH"}      # a search notice may already report its conclusion
 
 
 def needs_pdf(row):
