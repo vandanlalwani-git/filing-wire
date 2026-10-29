@@ -237,11 +237,19 @@ jobs:
             echo "stale=yes" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Upload the site again for a fresh deployment
+        id: reupload
+        if: steps.live.outputs.stale == 'yes'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+          name: github-pages-again
+
       - name: Publish again under a fresh label
         if: steps.live.outputs.stale == 'yes'
         uses: actions/github-script@v7
         env:
-          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+          ARTIFACT_ID: ${{ steps.reupload.outputs.artifact_id }}
         with:
           script: |
             const version = `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
