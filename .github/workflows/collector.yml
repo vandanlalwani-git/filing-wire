@@ -207,8 +207,14 @@ jobs:
         with:
           path: site
 
+      # Each run publishes new data with the same code, so the deployment is
+      # labelled with the run as well: since 29 Oct 2026 GitHub Pages treats a
+      # second deployment with the same label as already done and keeps serving
+      # the old site (the feed froze for 3 hours while every run "succeeded").
       - id: deploy
         uses: actions/deploy-pages@v4
+        env:
+          GITHUB_SHA: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Report a failure if both exchanges were down
         if: steps.collect.outputs.code == '2' || steps.collect.outputs.code == '3'
