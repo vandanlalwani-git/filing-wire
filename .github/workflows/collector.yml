@@ -42,6 +42,10 @@ on:
         description: "Re-pair end YYYY-MM-DD"
         type: string
         default: ""
+      force_republish:
+        description: "Test: publish again with a fresh label even if the site is current"
+        type: boolean
+        default: false
   schedule:
     - cron: "*/5 * * * *"     # every 5 minutes; GitHub often runs these late
 
@@ -203,18 +207,59 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      - uses: actions/upload-pages-artifact@v4
+      - id: upload
+        uses: actions/upload-pages-artifact@v4
         with:
           path: site
 
-      # Each run publishes new data with the same code, so the deployment is
-      # labelled with the run as well: since 29 Oct 2026 GitHub Pages treats a
-      # second deployment with the same label as already done and keeps serving
-      # the old site (the feed froze for 3 hours while every run "succeeded").
       - id: deploy
         uses: actions/deploy-pages@v4
+
+      # On 29 Oct 2026 GitHub Pages accepted every deployment for 3 hours,
+      # reported success, and kept serving the old site. So: check that the
+      # live site now shows what was just built; if not, publish again under a
+      # label of its own (a new label is what cleared it).
+      - name: Check the live site shows this run's data
+        id: live
         env:
-          GITHUB_SHA: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          PAGE: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          want=$(python3 -c "import json; print(json.load(open('site/data/status.json')).get('updated_ist', ''))")
+          got=""
+          for i in 1 2 3 4 5; do
+            sleep 20
+            got=$(curl -s --max-time 20 "${PAGE}data/status.json?v=$(date +%s%N)" \
+                  | python3 -c "import json, sys; print(json.load(sys.stdin).get('updated_ist', ''))" 2>/dev/null || true)
+            [ "$got" = "$want" ] && break
+          done
+          echo "built: $want, live: $got"
+          if [ "$got" != "$want" ] || [ "${{ inputs.force_republish }}" = "true" ]; then
+            echo "stale=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish again under a fresh label
+        if: steps.live.outputs.stale == 'yes'
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+        with:
+          script: |
+            const version = `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
+            const oidc = await core.getIDToken()
+            const { owner, repo } = context.repo
+            const made = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
+              owner, repo, artifact_id: Number(process.env.ARTIFACT_ID),
+              pages_build_version: version, oidc_token: oidc })
+            const id = made.data.id || version
+            core.info(`republishing as ${version} (deployment ${id})`)
+            for (let i = 0; i < 60; i++) {
+              await new Promise(r => setTimeout(r, 5000))
+              const st = (await github.request('GET /repos/{owner}/{repo}/pages/deployments/{id}',
+                                               { owner, repo, id })).data.status
+              if (st === 'succeed') { core.info('republished'); return }
+              if (/fail|cancel|lost/.test(st)) { core.setFailed(`republish ${st}`); return }
+            }
+            core.setFailed('republish did not finish in 5 minutes')
 
       - name: Report a failure if both exchanges were down
         if: steps.collect.outputs.code == '2' || steps.collect.outputs.code == '3'
