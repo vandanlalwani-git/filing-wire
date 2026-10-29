@@ -43,7 +43,7 @@ on:
         type: string
         default: ""
       force_republish:
-        description: "Test: publish again with a fresh label even if the site is current"
+        description: "Test: add the Pages refresh commit even if the site is current"
         type: boolean
         default: false
   schedule:
@@ -207,8 +207,7 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      - id: upload
-        uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
 
@@ -216,13 +215,16 @@ jobs:
         uses: actions/deploy-pages@v4
 
       # On 29 Oct 2026 GitHub Pages accepted every deployment for 3 hours,
-      # reported success, and kept serving the old site. So: check that the
-      # live site now shows what was just built; if not, publish again under a
-      # label of its own (a new label is what cleared it).
-      - name: Check the live site shows this run's data
-        id: live
+      # reported success, and kept serving the old site; a new commit (a new
+      # deployment label) cleared it. So: check the live site shows what was
+      # just built. If it is more than 20 minutes behind, add an empty commit,
+      # so the next run publishes under a new label. (A second deployment in
+      # the same run is refused by GitHub.)
+      - name: Check the live site is current
         env:
           PAGE: ${{ steps.deploy.outputs.page_url }}
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force_republish }}
         run: |
           want=$(python3 -c "import json; print(json.load(open('site/data/status.json')).get('updated_ist', ''))")
           got=""
@@ -232,42 +234,19 @@ jobs:
                   | python3 -c "import json, sys; print(json.load(sys.stdin).get('updated_ist', ''))" 2>/dev/null || true)
             [ "$got" = "$want" ] && break
           done
-          echo "built: $want, live: $got"
-          if [ "$got" != "$want" ] || [ "${{ inputs.force_republish }}" = "true" ]; then
-            echo "stale=yes" >> "$GITHUB_OUTPUT"
+          behind=$(python3 -c "
+          from datetime import datetime as d
+          f = '%Y-%m-%d %H:%M:%S'
+          try: print(int((d.strptime('$want', f) - d.strptime('$got', f)).total_seconds() // 60))
+          except ValueError: print(0)")
+          echo "built: $want, live: $got, live is $behind min behind"
+          if [ "$behind" -gt 20 ] || [ "$FORCE" = "true" ]; then
+            echo "::warning::The live site is $behind minutes behind: adding an empty commit so the next run publishes under a new label"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -q --allow-empty -m "Pages refresh: the live site stopped updating (run $GITHUB_RUN_ID)"
+            git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main || true
           fi
-
-      - name: Upload the site again for a fresh deployment
-        id: reupload
-        if: steps.live.outputs.stale == 'yes'
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
-          name: github-pages-again
-
-      - name: Publish again under a fresh label
-        if: steps.live.outputs.stale == 'yes'
-        uses: actions/github-script@v7
-        env:
-          ARTIFACT_ID: ${{ steps.reupload.outputs.artifact_id }}
-        with:
-          script: |
-            const version = `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
-            const oidc = await core.getIDToken()
-            const { owner, repo } = context.repo
-            const made = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
-              owner, repo, artifact_id: Number(process.env.ARTIFACT_ID),
-              pages_build_version: version, oidc_token: oidc })
-            const id = made.data.id || version
-            core.info(`republishing as ${version} (deployment ${id})`)
-            for (let i = 0; i < 60; i++) {
-              await new Promise(r => setTimeout(r, 5000))
-              const st = (await github.request('GET /repos/{owner}/{repo}/pages/deployments/{id}',
-                                               { owner, repo, id })).data.status
-              if (st === 'succeed') { core.info('republished'); return }
-              if (/fail|cancel|lost/.test(st)) { core.setFailed(`republish ${st}`); return }
-            }
-            core.setFailed('republish did not finish in 5 minutes')
 
       - name: Report a failure if both exchanges were down
         if: steps.collect.outputs.code == '2' || steps.collect.outputs.code == '3'
